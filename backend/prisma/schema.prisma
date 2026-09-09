@@ -1,0 +1,295 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────
+
+enum ElectionStatus {
+  DRAFT      // Rascunho — em configuração
+  SCHEDULED  // Agendada — configurada, não aberta
+  OPEN       // Aberta — eleitores podem votar
+  CLOSED     // Encerrada — novos votos bloqueados
+}
+
+enum VoterStatus {
+  IN_PROGRESS  // EM_VOTACAO
+  VOTED        // VOTOU
+  ABANDONED    // Sessão abandonada/expirada
+}
+
+enum VoteType {
+  VALID  // Voto válido (candidato encontrado)
+  BLANK  // Voto em branco
+  NULL   // Voto nulo (número inválido)
+}
+
+enum AuditEventType {
+  ELECTION_CREATED
+  ELECTION_UPDATED
+  ELECTION_STATUS_CHANGED
+  ELECTION_OPENED
+  ELECTION_CLOSED
+  POSITION_CREATED
+  POSITION_UPDATED
+  POSITION_DELETED
+  CANDIDATE_CREATED
+  CANDIDATE_UPDATED
+  CANDIDATE_DELETED
+  STATE_CREATED
+  STATE_UPDATED
+  VOTER_SESSION_STARTED
+  VOTER_SESSION_COMPLETED
+  VOTER_SESSION_ABANDONED
+  VOTE_REGISTERED
+  DUPLICATE_VOTE_ATTEMPT
+  INVALID_CANDIDATE_ATTEMPT
+  DUPLICATE_CANDIDATE_ATTEMPT
+  ADMIN_LOGIN
+  ADMIN_LOGOUT
+  CONFIG_CHANGED
+}
+
+// ─────────────────────────────────────────────────────────
+// ADMINISTRAÇÃO
+// ─────────────────────────────────────────────────────────
+
+model AdminUser {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String   // bcrypt hash
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@map("admin_users")
+}
+
+// ─────────────────────────────────────────────────────────
+// ESTADOS
+// ─────────────────────────────────────────────────────────
+
+model State {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  abbreviation String   @unique // CE, SP, RJ...
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  electionStates ElectionState[]
+  candidates     Candidate[]
+  voterSessions  VoterSession[]
+  votes          Vote[]
+
+  @@map("states")
+}
+
+// ─────────────────────────────────────────────────────────
+// ELEIÇÕES
+// ─────────────────────────────────────────────────────────
+
+model Election {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  year        Int
+  status      ElectionStatus @default(DRAFT)
+  startDate   DateTime?
+  endDate     DateTime?
+
+  // Configurações da eleição
+  showResultsDuringVoting Boolean @default(false)
+  sessionTimeoutHours     Int     @default(2)
+  validateIp              Boolean @default(true) // Se false, permite múltiplos votos do mesmo IP (ideal para testes)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  electionStates     ElectionState[]
+  electionPositions  ElectionPosition[]
+  candidates         Candidate[]
+  voterSessions      VoterSession[]
+  votes              Vote[]
+  auditLogs          AuditLog[]
+
+  @@map("elections")
+}
+
+// Relação eleição ↔ estado participante
+model ElectionState {
+  id         String   @id @default(uuid())
+  electionId String
+  stateId    String
+  createdAt  DateTime @default(now())
+
+  election Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  state    State    @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@unique([electionId, stateId])
+  @@map("election_states")
+}
+
+// ─────────────────────────────────────────────────────────
+// CARGOS
+// ─────────────────────────────────────────────────────────
+
+// Cargo-base (ex: "Presidente", "Senador") — reutilizável entre eleições
+model Position {
+  id                String   @id @default(uuid())
+  name              String   @unique
+  description       String?
+  scope             String   @default("ESTADUAL") // NACIONAL, ESTADUAL, MUNICIPAL
+  defaultDigitCount Int      @default(2)
+  defaultSlots      Int      @default(1)
+  isNational        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  electionPositions ElectionPosition[]
+  candidates        Candidate[]
+
+  @@map("positions")
+}
+
+// Cargo configurado para uma eleição específica
+model ElectionPosition {
+  id           String   @id @default(uuid())
+  electionId   String
+  positionId   String
+  order        Int      // Ordem na sequência de votação
+  slots        Int      @default(1)  // Quantidade de vagas
+  digitCount   Int      @default(2)  // Quantidade de dígitos do número
+  isNational   Boolean  @default(true)  // true = mesmo candidatos para todos os estados
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  election Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  position Position  @relation(fields: [positionId], references: [id])
+
+  votes Vote[]
+
+  @@unique([electionId, positionId])
+  @@unique([electionId, order])
+  @@map("election_positions")
+}
+
+// ─────────────────────────────────────────────────────────
+// CANDIDATOS
+// ─────────────────────────────────────────────────────────
+
+model Candidate {
+  id             String   @id @default(uuid())
+  electionId     String
+  positionId     String
+  stateId        String?  // null = candidatura nacional
+  name           String
+  electoralName  String
+  number         String   // Ex: "13", "4444"
+  party              String
+  photoUrl           String?
+  viceCandidateName  String?
+  isNational         Boolean  @default(false)  // true = aparece para todos os estados
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  election Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  position Position  @relation(fields: [positionId], references: [id])
+  state    State?    @relation(fields: [stateId], references: [id])
+
+  votes Vote[]
+
+  // Número único por cargo/eleição/estado (ou nacional)
+  @@unique([electionId, positionId, number, stateId])
+  @@map("candidates")
+}
+
+// ─────────────────────────────────────────────────────────
+// SESSÃO DO ELEITOR
+// ─────────────────────────────────────────────────────────
+
+model VoterSession {
+  id           String      @id @default(uuid())
+  electionId   String
+  stateId      String
+  discordName  String
+  rpgName      String
+  ip           String
+  status       VoterStatus @default(IN_PROGRESS)
+  startedAt    DateTime    @default(now())
+  completedAt  DateTime?
+  updatedAt    DateTime    @updatedAt
+
+  // Progresso: índice do cargo atual e vaga atual
+  currentPositionOrder Int @default(0)
+  currentSlot          Int @default(1)
+
+  election Election @relation(fields: [electionId], references: [id])
+  state    State    @relation(fields: [stateId], references: [id])
+  votes    Vote[]
+
+  // Um IP só pode ter UMA sessão concluída por eleição
+  // Sessões IN_PROGRESS/ABANDONED podem existir, mas ao tentar criar nova
+  // o backend verifica se já existe VOTED
+  @@map("voter_sessions")
+}
+
+// ─────────────────────────────────────────────────────────
+// VOTOS
+// ─────────────────────────────────────────────────────────
+
+model Vote {
+  id                 String    @id @default(uuid())
+  voterSessionId     String
+  electionId         String
+  electionPositionId String
+  stateId            String
+  slot               Int       // Vaga (1, 2, 3...)
+  type               VoteType
+  candidateId        String?   // null para branco/nulo
+  registeredAt       DateTime  @default(now())
+
+  voterSession     VoterSession     @relation(fields: [voterSessionId], references: [id])
+  election         Election         @relation(fields: [electionId], references: [id])
+  electionPosition ElectionPosition @relation(fields: [electionPositionId], references: [id])
+  state            State            @relation(fields: [stateId], references: [id])
+  candidate        Candidate?       @relation(fields: [candidateId], references: [id])
+
+  // Impede voto duplicado na mesma vaga da mesma sessão
+  @@unique([voterSessionId, electionPositionId, slot])
+  @@map("votes")
+}
+
+// ─────────────────────────────────────────────────────────
+// AUDITORIA
+// ─────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String         @id @default(uuid())
+  eventType   AuditEventType
+  description String
+  electionId  String?
+  adminUserId String?
+  metadata    Json?          // Dados técnicos adicionais
+  ip          String?
+  createdAt   DateTime       @default(now())
+
+  election  Election?  @relation(fields: [electionId], references: [id])
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id])
+
+  @@map("audit_logs")
+}
