@@ -31,6 +31,38 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
   const election = await getElectionWithAccess(req.params.electionId, true);
   const { stateId } = req.query;
 
+  // Totais gerais e por estado da eleição (sem depender de filtro)
+  const [totalVotesOverall, totalVotersOverall, electionStates, votesByStateGroup, votersByStateGroup] = await Promise.all([
+    prisma.vote.count({ where: { electionId: req.params.electionId } }),
+    prisma.voterSession.count({ where: { electionId: req.params.electionId, status: 'VOTED' } }),
+    prisma.electionState.findMany({
+      where: { electionId: req.params.electionId },
+      include: { state: { select: { id: true, name: true, abbreviation: true } } },
+      orderBy: { state: { name: 'asc' } },
+    }),
+    prisma.vote.groupBy({
+      by: ['stateId'],
+      where: { electionId: req.params.electionId },
+      _count: { _all: true },
+    }),
+    prisma.voterSession.groupBy({
+      by: ['stateId'],
+      where: { electionId: req.params.electionId, status: 'VOTED' },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const statesOverview = electionStates.map((es) => {
+    const stateVotes = votesByStateGroup.find((g) => g.stateId === es.stateId)?._count._all ?? 0;
+    const stateVoters = votersByStateGroup.find((g) => g.stateId === es.stateId)?._count._all ?? 0;
+    return {
+      state: es.state,
+      votes: stateVotes,
+      voters: stateVoters,
+      percentage: totalVotesOverall > 0 ? ((stateVotes / totalVotesOverall) * 100).toFixed(1) : '0.0',
+    };
+  });
+
   const results = await Promise.all(
     election.electionPositions.map(async (ep) => {
       const slots = Array.from({ length: ep.slots }, (_, i) => i + 1);
@@ -51,6 +83,8 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
           const totalVotes = votesByCandidate.reduce((sum, v) => sum + v._count._all, 0);
           const blank = votesByCandidate.filter((v) => v.type === 'BLANK').reduce((s, v) => s + v._count._all, 0);
           const nullVotes = votesByCandidate.filter((v) => v.type === 'NULL').reduce((s, v) => s + v._count._all, 0);
+          // Regra oficial: votos válidos excluem brancos e nulos
+          const validVotes = totalVotes - blank - nullVotes;
 
           const validCandidateIds = votesByCandidate
             .filter((v) => v.type === 'VALID' && v.candidateId)
@@ -69,7 +103,9 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
               return {
                 candidate: c,
                 votes,
-                percentage: totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(2) : '0.00',
+                // Porcentagem oficial do TSE: calculada sobre os VOTOS VÁLIDOS
+                percentage: validVotes > 0 ? ((votes / validVotes) * 100).toFixed(2) : '0.00',
+                percentageTotal: totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(2) : '0.00',
               };
             })
             .sort((a, b) => b.votes - a.votes);
@@ -77,8 +113,12 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
           return {
             slot,
             totalVotes,
+            validVotes,
             blank,
             null: nullVotes,
+            blankPercentage: totalVotes > 0 ? ((blank / totalVotes) * 100).toFixed(2) : '0.00',
+            nullPercentage: totalVotes > 0 ? ((nullVotes / totalVotes) * 100).toFixed(2) : '0.00',
+            validPercentage: totalVotes > 0 ? ((validVotes / totalVotes) * 100).toFixed(2) : '0.00',
             candidates: candidateResults,
           };
         })
@@ -96,7 +136,15 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
     })
   );
 
-  res.json({ election: { id: election.id, name: election.name, status: election.status }, results });
+  res.json({
+    election: { id: election.id, name: election.name, status: election.status },
+    overview: {
+      totalVotes: totalVotesOverall,
+      totalVoters: totalVotersOverall,
+      byState: statesOverview,
+    },
+    results,
+  });
 });
 
 // GET /api/results/:electionId/summary — resumo rápido para dashboard

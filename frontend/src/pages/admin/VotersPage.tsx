@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { votersApi, electionsApi } from '../../services/api';
-import { VoterSession, Election } from '../../types';
-import { Search, RefreshCw } from 'lucide-react';
+import { VoterSession, Election, VoterReceipt } from '../../types';
+import { Search, RefreshCw, FileText, CheckCircle, Printer, X, Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const VotersPage: React.FC = () => {
@@ -13,6 +13,12 @@ export const VotersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Estado do Modal de Comprovante & Votos
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState<VoterReceipt | null>(null);
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [copiedProtocol, setCopiedProtocol] = useState(false);
 
   useEffect(() => {
     electionsApi
@@ -56,13 +62,35 @@ export const VotersPage: React.FC = () => {
     fetchVoters();
   }, [selectedElectionId, search, statusFilter]);
 
+  const handleOpenReceipt = async (sessionId: string) => {
+    setShowReceiptModal(true);
+    setLoadingReceipt(true);
+    setCopiedProtocol(false);
+    try {
+      const data = await votersApi.getReceipt(sessionId);
+      setReceiptData(data);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao carregar comprovante de votação');
+      setShowReceiptModal(false);
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
+
+  const handleCopyProtocol = (protocol: string) => {
+    navigator.clipboard.writeText(protocol);
+    setCopiedProtocol(true);
+    toast.success('Protocolo copiado para a área de transferência!');
+    setTimeout(() => setCopiedProtocol(false), 2500);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>Comparecimento & Votantes</h1>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-            Registro seguro de presença eleitoral (voto secreto e auditável)
+            Registro de presença eleitoral, auditoria de votos e comprovantes de votação
           </p>
         </div>
 
@@ -158,25 +186,30 @@ export const VotersPage: React.FC = () => {
       {/* Participação por Estado (Top Estados) */}
       {byState.length > 0 && (
         <div className="admin-card" style={{ padding: '1.25rem' }}>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'white', marginBottom: '0.75rem' }}>
-            Participação por Estado / UF (Total: {totalVoters} votos computados)
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem' }}>
-            {byState.slice(0, 10).map((st, i) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'white' }}>
+              Comparecimento Eleitoral por Estado (Total: {totalVoters} eleitores)
+            </h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.5rem' }}>
+            {byState.map((st) => (
               <div
-                key={i}
+                key={st.state.id}
                 style={{
                   background: '#0f172a',
                   border: '1px solid #334155',
                   borderRadius: '6px',
                   padding: '0.5rem 0.75rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 700, color: '#60a5fa' }}>{st.state?.abbreviation}</span>
-                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{st.percentage}%</span>
+                <div>
+                  <strong style={{ color: 'white', fontSize: '0.85rem' }}>{st.state.abbreviation}</strong>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>{st.state.name}</span>
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'white', marginTop: '2px' }}>
+                <div style={{ textAlign: 'right', fontSize: '0.85rem', fontWeight: 700, color: '#60a5fa' }}>
                   {st.voted} eleitor(es)
                 </div>
               </div>
@@ -197,18 +230,19 @@ export const VotersPage: React.FC = () => {
                 <th>Status</th>
                 <th>Início da Votação</th>
                 <th>Conclusão do Voto</th>
+                <th style={{ textAlign: 'center' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                     Carregando eleitores...
                   </td>
                 </tr>
               ) : voters.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                     Nenhum eleitor encontrado para esta eleição.
                   </td>
                 </tr>
@@ -253,6 +287,30 @@ export const VotersPage: React.FC = () => {
                     <td style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
                       {v.completedAt ? new Date(v.completedAt).toLocaleString('pt-BR') : '-'}
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleOpenReceipt(v.id)}
+                        disabled={v.status !== 'VOTED'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.35rem 0.75rem',
+                          background: v.status === 'VOTED' ? 'rgba(59, 130, 246, 0.2)' : '#334155',
+                          color: v.status === 'VOTED' ? '#60a5fa' : '#64748b',
+                          border: v.status === 'VOTED' ? '1px solid rgba(59, 130, 246, 0.4)' : 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: v.status === 'VOTED' ? 'pointer' : 'not-allowed',
+                          transition: 'all 0.2s',
+                        }}
+                        title={v.status === 'VOTED' ? 'Visualizar votos e comprovante' : 'Votação ainda em andamento'}
+                      >
+                        <FileText size={14} />
+                        {v.status === 'VOTED' ? 'Ver Votos & Comprovante' : 'Em votação'}
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -260,6 +318,278 @@ export const VotersPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* ── MODAL DE COMPROVANTE DE VOTAÇÃO E VOTOS AUDITADOS ── */}
+      {showReceiptModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+          onClick={() => setShowReceiptModal(false)}
+        >
+          <div
+            style={{
+              background: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '12px',
+              maxWidth: '620px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div
+              style={{
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid #334155',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <FileText size={20} color="#60a5fa" />
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Comprovante de Votação & Cédula
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowReceiptModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {loadingReceipt || !receiptData ? (
+              <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 0.75rem' }} />
+                Carregando comprovante e votos do eleitor...
+              </div>
+            ) : (
+              <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {/* Visual Estilo Comprovante TSE */}
+                <div
+                  style={{
+                    background: '#f8fafc',
+                    color: '#0f172a',
+                    borderRadius: '8px',
+                    padding: '1.25rem',
+                    border: '1px dashed #94a3b8',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  <div style={{ textAlign: 'center', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 900, letterSpacing: '0.05em', color: '#1e3d5e' }}>
+                      JUSTIÇA ELEITORAL — SISTEMA DE VOTAÇÃO RPG
+                    </div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569' }}>
+                      {receiptData.session.electionName} ({receiptData.session.electionYear})
+                    </div>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.35rem', color: '#15803d', fontSize: '0.75rem', fontWeight: 700 }}>
+                      <CheckCircle size={14} /> COMPROVANTE DE VOTAÇÃO
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem' }}>
+                    <div>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: '0.7rem' }}>ELEITOR (RPG):</span>
+                      <strong style={{ color: '#0f172a' }}>{receiptData.session.rpgName}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: '0.7rem' }}>DISCORD:</span>
+                      <strong style={{ color: '#0f172a' }}>{receiptData.session.discordName}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: '0.7rem' }}>ESTADO / UF:</span>
+                      <strong style={{ color: '#0f172a' }}>{receiptData.session.stateName} ({receiptData.session.stateAbbreviation})</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: '0.7rem' }}>DATA / HORA:</span>
+                      <strong style={{ color: '#0f172a' }}>
+                        {receiptData.session.completedAt ? new Date(receiptData.session.completedAt).toLocaleString('pt-BR') : '-'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Protocolo */}
+                  <div
+                    style={{
+                      marginTop: '0.75rem',
+                      padding: '0.5rem',
+                      background: '#e2e8f0',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <div>
+                      <span style={{ color: '#64748b' }}>Protocolo de Autenticidade: </span>
+                      <strong style={{ fontFamily: 'var(--font-mono)', color: '#0369a1' }}>
+                        {receiptData.session.protocol}
+                      </strong>
+                    </div>
+                    <button
+                      onClick={() => handleCopyProtocol(receiptData.session.protocol)}
+                      style={{
+                        background: 'white',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '4px',
+                        padding: '0.2rem 0.5rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: '0.7rem',
+                        color: '#334155',
+                      }}
+                    >
+                      {copiedProtocol ? <Check size={12} color="#15803d" /> : <Copy size={12} />}
+                      {copiedProtocol ? 'Copiado' : 'Copiar'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── DETALHAMENTO DE VOTOS COMPUTADOS ── */}
+                <div>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'white', marginBottom: '0.75rem' }}>
+                    🗳️ Votos Registrados pelo Eleitor
+                  </h3>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    {receiptData.votes.map((v, i) => (
+                      <div
+                        key={v.id || i}
+                        style={{
+                          background: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: '8px',
+                          padding: '0.75rem 1rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'white' }}>
+                            {v.positionName} {v.totalSlots > 1 ? `(Vaga ${v.slot})` : ''}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
+                            Registrado em {new Date(v.registeredAt).toLocaleTimeString('pt-BR')}
+                          </div>
+                        </div>
+
+                        <div>
+                          {v.type === 'VALID' && v.candidate ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', textAlign: 'right' }}>
+                              {v.candidate.photoUrl && (
+                                <img
+                                  src={v.candidate.photoUrl}
+                                  alt={v.candidate.electoralName}
+                                  style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                />
+                              )}
+                              <div>
+                                <strong style={{ color: '#4ade80', fontSize: '0.9rem', display: 'block' }}>
+                                  {v.candidate.electoralName}
+                                </strong>
+                                <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
+                                  Nº {v.candidate.number} • {v.candidate.party}
+                                </span>
+                              </div>
+                            </div>
+                          ) : v.type === 'BLANK' ? (
+                            <span
+                              style={{
+                                padding: '0.3rem 0.6rem',
+                                background: '#334155',
+                                color: '#cbd5e1',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              VOTO EM BRANCO
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                padding: '0.3rem 0.6rem',
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                color: '#f87171',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              VOTO NULO
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer Modal */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    onClick={() => window.print()}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: '#334155',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Printer size={15} /> Imprimir Comprovante
+                  </button>
+                  <button
+                    onClick={() => setShowReceiptModal(false)}
+                    style={{
+                      padding: '0.5rem 1.25rem',
+                      background: '#2563eb',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

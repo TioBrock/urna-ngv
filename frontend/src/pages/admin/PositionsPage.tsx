@@ -1,21 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { positionsApi } from '../../services/api';
 import { Position } from '../../types';
-import { Award, Plus, Globe, Building2, Landmark, Trash2 } from 'lucide-react';
+import { Award, Plus, Globe, Building2, Landmark, Trash2, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const PositionsPage: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form State
+  // Form State Novo
   const [formName, setFormName] = useState('');
   const [formScope, setFormScope] = useState<'NACIONAL' | 'ESTADUAL' | 'MUNICIPAL'>('ESTADUAL');
   const [formDigitCount, setFormDigitCount] = useState(2);
   const [formSlots, setFormSlots] = useState(1);
   const [formDescription, setFormDescription] = useState('');
+
+  // Form State Edição
+  const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editScope, setEditScope] = useState<'NACIONAL' | 'ESTADUAL' | 'MUNICIPAL'>('ESTADUAL');
+  const [editDigitCount, setEditDigitCount] = useState(2);
+  const [editSlots, setEditSlots] = useState(1);
+  const [editDescription, setEditDescription] = useState('');
 
   const fetchPositions = () => {
     setLoading(true);
@@ -57,6 +66,45 @@ export const PositionsPage: React.FC = () => {
       fetchPositions();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao cadastrar cargo');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEdit = (pos: Position) => {
+    setEditingPosition(pos);
+    setEditName(pos.name);
+    setEditScope((pos.scope as any) || (pos.isNational ? 'NACIONAL' : 'ESTADUAL'));
+    setEditDigitCount(pos.defaultDigitCount ?? 2);
+    setEditSlots(pos.defaultSlots ?? 1);
+    setEditDescription(pos.description || '');
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePosition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPosition) return;
+    if (!editName.trim()) {
+      toast.error('Informe o nome do cargo');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await positionsApi.updateBasePosition(editingPosition.id, {
+        name: editName.trim(),
+        scope: editScope,
+        defaultDigitCount: Number(editDigitCount),
+        defaultSlots: Number(editSlots),
+        description: editDescription.trim() || undefined,
+      });
+
+      toast.success('Cargo atualizado com sucesso!');
+      setShowEditModal(false);
+      setEditingPosition(null);
+      fetchPositions();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao atualizar cargo');
     } finally {
       setSubmitting(false);
     }
@@ -300,20 +348,36 @@ export const PositionsPage: React.FC = () => {
                       {pos.description || 'Padrão do Tribunal Superior Eleitoral'}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        title="Remover Cargo Base"
-                        onClick={() => handleDeletePosition(pos.id, pos.name)}
-                        style={{
-                          padding: '0.35rem 0.6rem',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          color: '#ef4444',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                        <button
+                          title="Editar Cargo Base"
+                          onClick={() => handleStartEdit(pos)}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          title="Remover Cargo Base"
+                          onClick={() => handleDeletePosition(pos.id, pos.name)}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -503,6 +567,193 @@ export const PositionsPage: React.FC = () => {
                   }}
                 >
                   {submitting ? 'Cadastrando...' : 'Cadastrar Cargo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Editar Cargo Base */}
+      {showEditModal && editingPosition && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="animate-fade-in-scale"
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '480px',
+              padding: '1.75rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Pencil size={18} color="#60a5fa" />
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Editar Cargo Base
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePosition} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  NOME DO CARGO POLÍTICO *
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  ÂMBITO DO CARGO *
+                </label>
+                <select
+                  value={editScope}
+                  onChange={(e) => setEditScope(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                  }}
+                >
+                  <option value="ESTADUAL">Estadual (Governador, Deputado Estadual...)</option>
+                  <option value="NACIONAL">Nacional (Presidente, Senador, Dep. Federal...)</option>
+                  <option value="MUNICIPAL">Municipal (Prefeito, Vereador...)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    QTD. DÍGITOS PADRÃO
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={editDigitCount}
+                    onChange={(e) => setEditDigitCount(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    VAGAS PADRÃO
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={editSlots}
+                    onChange={(e) => setEditSlots(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  DESCRIÇÃO / OBSERVAÇÃO ELEITORAL
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                    resize: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  style={{
+                    padding: '0.65rem 1.25rem',
+                    background: '#334155',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    padding: '0.65rem 1.5rem',
+                    background: 'linear-gradient(135deg, #1e3d5e, #1565c0)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  {submitting ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>

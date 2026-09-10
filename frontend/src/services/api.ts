@@ -9,6 +9,8 @@ import {
   StartVotingResponse,
   CastVoteResponse,
   ElectionResult,
+  ResultsOverview,
+  VoterReceipt,
   AuditLog,
   DashboardData,
   AdminUser,
@@ -175,6 +177,19 @@ export const positionsApi = {
   ): Promise<void> => {
     await api.put(`/positions/election/${electionId}/reorder`, { positions });
   },
+  updateElectionPosition: async (
+    id: string,
+    data: Partial<{
+      order: number;
+      slots: number;
+      digitCount: number;
+      isNational: boolean;
+      isActive: boolean;
+    }>
+  ): Promise<ElectionPosition> => {
+    const res = await api.put(`/positions/${id}`, data);
+    return res.data;
+  },
   delete: async (id: string): Promise<void> => {
     await api.delete(`/positions/${id}`);
   },
@@ -186,9 +201,14 @@ export const candidatesApi = {
     electionId?: string;
     positionId?: string;
     stateId?: string;
+    party?: string;
     search?: string;
   }): Promise<Candidate[]> => {
     const res = await api.get('/candidates', { params });
+    return res.data;
+  },
+  getParties: async (electionId?: string): Promise<string[]> => {
+    const res = await api.get('/candidates/parties', { params: { electionId } });
     return res.data;
   },
   create: async (formData: FormData): Promise<Candidate> => {
@@ -237,6 +257,10 @@ export const votersApi = {
     const res = await api.get(`/voters/${electionId}/by-state`);
     return res.data;
   },
+  getReceipt: async (sessionId: string): Promise<VoterReceipt> => {
+    const res = await api.get(`/voters/receipt/${sessionId}`);
+    return res.data;
+  },
 };
 
 // ── RESULTS (ADMIN) ──
@@ -244,7 +268,11 @@ export const resultsApi = {
   getResults: async (
     electionId: string,
     stateId?: string
-  ): Promise<{ election: { id: string; name: string; status: string }; results: ElectionResult[] }> => {
+  ): Promise<{
+    election: { id: string; name: string; status: string };
+    overview: ResultsOverview;
+    results: ElectionResult[];
+  }> => {
     const res = await api.get(`/results/${electionId}`, { params: { stateId } });
     return res.data;
   },

@@ -85,3 +85,71 @@ votersRouter.get('/:electionId/by-state', requireAuth, async (req: Request, res:
   result.sort((a, b) => b.voted - a.voted);
   res.json({ byState: result, totalVoters });
 });
+
+// GET /api/voters/receipt/:sessionId — comprovante de votação e votos do eleitor
+votersRouter.get('/receipt/:sessionId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const session = await prisma.voterSession.findUnique({
+    where: { id: req.params.sessionId },
+    include: {
+      election: { select: { id: true, name: true, year: true } },
+      state: { select: { id: true, name: true, abbreviation: true } },
+      votes: {
+        include: {
+          electionPosition: {
+            include: { position: { select: { name: true } } },
+          },
+          candidate: {
+            select: { id: true, name: true, electoralName: true, number: true, party: true, photoUrl: true, viceCandidateName: true },
+          },
+        },
+        orderBy: [
+          { electionPosition: { order: 'asc' } },
+          { slot: 'asc' },
+        ],
+      },
+    },
+  });
+
+  if (!session) {
+    res.status(404).json({ error: 'Sessão de votação não encontrada' });
+    return;
+  }
+
+  const protocol = `NGV-${session.id.slice(0, 8).toUpperCase()}-${session.id.slice(-4).toUpperCase()}`;
+
+  res.json({
+    session: {
+      id: session.id,
+      electionName: session.election.name,
+      electionYear: session.election.year,
+      discordName: session.discordName,
+      rpgName: session.rpgName,
+      stateName: session.state.name,
+      stateAbbreviation: session.state.abbreviation,
+      status: session.status,
+      startedAt: session.startedAt,
+      completedAt: session.completedAt,
+      protocol,
+    },
+    votes: session.votes.map((v) => ({
+      id: v.id,
+      positionName: v.electionPosition.position.name,
+      slot: v.slot,
+      totalSlots: v.electionPosition.slots,
+      type: v.type,
+      candidate: v.candidate
+        ? {
+            id: v.candidate.id,
+            name: v.candidate.name,
+            electoralName: v.candidate.electoralName,
+            number: v.candidate.number,
+            party: v.candidate.party,
+            photoUrl: v.candidate.photoUrl,
+            viceCandidateName: v.candidate.viceCandidateName,
+          }
+        : null,
+      registeredAt: v.registeredAt,
+    })),
+  });
+});
+

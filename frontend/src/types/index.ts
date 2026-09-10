@@ -128,15 +128,37 @@ export interface CandidateResult {
     photoUrl?: string | null;
   };
   votes: number;
-  percentage: string;
+  percentage: string; // % sobre votos válidos
+  percentageTotal?: string; // % sobre comparecimento total
 }
 
 export interface SlotResult {
   slot: number;
   totalVotes: number;
+  validVotes: number;
   blank: number;
   null: number;
+  blankPercentage: string;
+  nullPercentage: string;
+  validPercentage: string;
   candidates: CandidateResult[];
+}
+
+export interface StateVoteOverview {
+  state: {
+    id: string;
+    name: string;
+    abbreviation: string;
+  };
+  votes: number;
+  voters: number;
+  percentage: string;
+}
+
+export interface ResultsOverview {
+  totalVotes: number;
+  totalVoters: number;
+  byState: StateVoteOverview[];
 }
 
 export interface ElectionResult {
@@ -147,6 +169,39 @@ export interface ElectionResult {
     slots: number;
   };
   slots: SlotResult[];
+}
+
+export interface VoterReceipt {
+  session: {
+    id: string;
+    electionName: string;
+    electionYear: number;
+    discordName: string;
+    rpgName: string;
+    stateName: string;
+    stateAbbreviation: string;
+    status: string;
+    startedAt: string;
+    completedAt?: string | null;
+    protocol: string;
+  };
+  votes: {
+    id: string;
+    positionName: string;
+    slot: number;
+    totalSlots: number;
+    type: VoteType;
+    candidate: {
+      id?: string;
+      name: string;
+      electoralName: string;
+      number: string;
+      party: string;
+      photoUrl?: string | null;
+      viceCandidateName?: string | null;
+    } | null;
+    registeredAt: string;
+  }[];
 }
 
 export interface AuditLog {

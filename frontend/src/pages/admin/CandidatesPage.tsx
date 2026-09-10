@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { candidatesApi, electionsApi, positionsApi, statesApi } from '../../services/api';
 import { Candidate, Election, Position, State } from '../../types';
-import { Plus, Trash2, Search, User } from 'lucide-react';
+import { Plus, Trash2, Search, User, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const CandidatesPage: React.FC = () => {
@@ -11,13 +11,16 @@ export const CandidatesPage: React.FC = () => {
   const [elections, setElections] = useState<Election[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [states, setStates] = useState<State[]>([]);
+  const [availableParties, setAvailableParties] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Filtros
   const selectedElectionId = searchParams.get('electionId') || '';
   const [filterPositionId, setFilterPositionId] = useState('');
   const [filterStateId, setFilterStateId] = useState('');
+  const [filterParty, setFilterParty] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
 
   // Formulário Novo Candidato
@@ -32,6 +35,19 @@ export const CandidatesPage: React.FC = () => {
   const [formIsNational, setFormIsNational] = useState(false);
   const [formPhoto, setFormPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Formulário Edição de Candidato
+  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editElectoralName, setEditElectoralName] = useState('');
+  const [editNumber, setEditNumber] = useState('');
+  const [editParty, setEditParty] = useState('');
+  const [editPositionId, setEditPositionId] = useState('');
+  const [editStateId, setEditStateId] = useState('');
+  const [editViceName, setEditViceName] = useState('');
+  const [editIsNational, setEditIsNational] = useState(false);
+  const [editPhoto, setEditPhoto] = useState<File | null>(null);
+  const [editIsActive, setEditIsActive] = useState(true);
 
   // Carrega opções iniciais
   useEffect(() => {
@@ -54,6 +70,13 @@ export const CandidatesPage: React.FC = () => {
       .catch(() => toast.error('Erro ao carregar opções de eleições e cargos'));
   }, []);
 
+  const fetchParties = () => {
+    candidatesApi
+      .getParties(selectedElectionId || undefined)
+      .then(setAvailableParties)
+      .catch(() => {});
+  };
+
   const fetchCandidates = () => {
     setLoading(true);
     candidatesApi
@@ -61,16 +84,20 @@ export const CandidatesPage: React.FC = () => {
         electionId: selectedElectionId || undefined,
         positionId: filterPositionId || undefined,
         stateId: filterStateId || undefined,
+        party: filterParty || undefined,
         search: filterSearch || undefined,
       })
-      .then(setCandidates)
+      .then((data) => {
+        setCandidates(data);
+      })
       .catch(() => toast.error('Erro ao listar candidatos'))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     fetchCandidates();
-  }, [selectedElectionId, filterPositionId, filterStateId, filterSearch]);
+    fetchParties();
+  }, [selectedElectionId, filterPositionId, filterStateId, filterParty, filterSearch]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,11 +145,81 @@ export const CandidatesPage: React.FC = () => {
       setFormNumber('');
       setFormParty('');
       setFormViceName('');
-      setFormStateId('');
       setFormPhoto(null);
       fetchCandidates();
+      fetchParties();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao registrar candidato');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEdit = (candidate: Candidate) => {
+    setEditingCandidate(candidate);
+    setEditName(candidate.name || candidate.electoralName);
+    setEditElectoralName(candidate.electoralName);
+    setEditNumber(candidate.number);
+    setEditParty(candidate.party);
+    setEditPositionId(candidate.positionId);
+    setEditStateId(candidate.stateId || '');
+    setEditViceName(candidate.viceCandidateName || '');
+    setEditIsNational(candidate.isNational ?? false);
+    setEditIsActive(candidate.isActive ?? true);
+    setEditPhoto(null);
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCandidate) return;
+
+    if (!editNumber || !editElectoralName || !editParty) {
+      toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+
+    const p = positions.find((pos) => pos.id === editPositionId);
+    const isNationalCargo =
+      p?.scope === 'NACIONAL' ||
+      p?.isNational ||
+      ['Presidente', 'Vice-Presidente'].includes(p?.name ?? '') ||
+      editIsNational;
+
+    const isNat = isNationalCargo || !editStateId;
+
+    const formData = new FormData();
+    formData.append('name', editName || editElectoralName);
+    formData.append('electoralName', editElectoralName);
+    formData.append('number', editNumber);
+    formData.append('party', editParty);
+    formData.append('positionId', editPositionId);
+    if (!isNat && editStateId) {
+      formData.append('stateId', editStateId);
+    } else {
+      formData.append('stateId', '');
+    }
+    formData.append('isNational', isNat ? 'true' : 'false');
+    formData.append('isActive', editIsActive ? 'true' : 'false');
+    if (editViceName) {
+      formData.append('viceCandidateName', editViceName);
+    } else {
+      formData.append('viceCandidateName', '');
+    }
+    if (editPhoto) {
+      formData.append('photo', editPhoto);
+    }
+
+    setSubmitting(true);
+    try {
+      await candidatesApi.update(editingCandidate.id, formData);
+      toast.success('Candidato atualizado com sucesso!');
+      setShowEditModal(false);
+      setEditingCandidate(null);
+      fetchCandidates();
+      fetchParties();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao atualizar candidato');
     } finally {
       setSubmitting(false);
     }
@@ -135,6 +232,7 @@ export const CandidatesPage: React.FC = () => {
       await candidatesApi.delete(id);
       toast.success('Candidato removido');
       fetchCandidates();
+      fetchParties();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao remover candidato');
     }
@@ -144,11 +242,12 @@ export const CandidatesPage: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>Gestão de Candidatos</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>Gerenciamento de Candidatos</h1>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-            Cadastre chapas, números e fotos que aparecerão na urna eletrônica
+            Registro e edição de chapas eleitorais, partidos e números de urna
           </p>
         </div>
+
         <button
           onClick={() => setShowModal(true)}
           style={{
@@ -160,22 +259,26 @@ export const CandidatesPage: React.FC = () => {
             color: 'white',
             border: 'none',
             borderRadius: '8px',
-            fontWeight: 700,
             fontSize: '0.85rem',
+            fontWeight: 700,
             cursor: 'pointer',
           }}
         >
-          <Plus size={18} /> Novo Candidato
+          <Plus size={16} /> Novo Candidato
         </button>
       </div>
 
       {/* Barra de Filtros */}
-      <div className="admin-card" style={{ padding: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="admin-card" style={{ padding: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Eleição */}
         <div style={{ flex: '1 1 200px' }}>
           <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>ELEIÇÃO</label>
           <select
             value={selectedElectionId}
-            onChange={(e) => setSearchParams({ electionId: e.target.value })}
+            onChange={(e) => {
+              setSearchParams({ electionId: e.target.value });
+              setFormElectionId(e.target.value);
+            }}
             style={{
               width: '100%',
               padding: '0.5rem',
@@ -194,6 +297,7 @@ export const CandidatesPage: React.FC = () => {
           </select>
         </div>
 
+        {/* Cargo */}
         <div style={{ flex: '1 1 180px' }}>
           <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>CARGO</label>
           <select
@@ -210,15 +314,41 @@ export const CandidatesPage: React.FC = () => {
             }}
           >
             <option value="">Todos os cargos</option>
-            {positions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
+            {positions.map((pos) => (
+              <option key={pos.id} value={pos.id}>
+                {pos.name}
               </option>
             ))}
           </select>
         </div>
 
-        <div style={{ flex: '1 1 140px' }}>
+        {/* Partido (Filtro apenas com os partidos inseridos) */}
+        <div style={{ flex: '1 1 150px' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>PARTIDO</label>
+          <select
+            value={filterParty}
+            onChange={(e) => setFilterParty(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              background: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '6px',
+              color: 'white',
+              fontSize: '0.85rem',
+            }}
+          >
+            <option value="">Todos os Partidos</option>
+            {availableParties.map((pty) => (
+              <option key={pty} value={pty}>
+                {pty}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Estado */}
+        <div style={{ flex: '1 1 150px' }}>
           <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>ESTADO (UF)</label>
           <select
             value={filterStateId}
@@ -233,7 +363,7 @@ export const CandidatesPage: React.FC = () => {
               fontSize: '0.85rem',
             }}
           >
-            <option value="">Nacional / Todos</option>
+            <option value="">Todos os estados</option>
             {states.map((st) => (
               <option key={st.id} value={st.id}>
                 {st.name} ({st.abbreviation})
@@ -242,8 +372,9 @@ export const CandidatesPage: React.FC = () => {
           </select>
         </div>
 
+        {/* Busca textual */}
         <div style={{ flex: '1 1 200px' }}>
-          <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>BUSCA</label>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>BUSCA RÁPIDA</label>
           <div style={{ position: 'relative' }}>
             <Search size={16} color="#64748b" style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)' }} />
             <input
@@ -403,20 +534,38 @@ export const CandidatesPage: React.FC = () => {
                       {c.viceCandidateName || '-'}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        title="Remover Candidato"
-                        onClick={() => handleDelete(c.id, c.electoralName)}
-                        style={{
-                          padding: '0.35rem 0.6rem',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          color: '#ef4444',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                        {/* Botão Editar Candidato */}
+                        <button
+                          title="Editar Candidato"
+                          onClick={() => handleStartEdit(c)}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        {/* Botão Remover Candidato */}
+                        <button
+                          title="Remover Candidato"
+                          onClick={() => handleDelete(c.id, c.electoralName)}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -426,7 +575,7 @@ export const CandidatesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal Novo Candidato */}
+      {/* ── MODAL NOVO CANDIDATO ── */}
       {showModal && (
         <div
           style={{
@@ -555,7 +704,7 @@ export const CandidatesPage: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: PL, PT, MDB, UNIÃO"
+                    placeholder="Ex: PL, PT, MDB, PSDB"
                     value={formParty}
                     onChange={(e) => setFormParty(e.target.value.toUpperCase())}
                     required
@@ -577,7 +726,7 @@ export const CandidatesPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: LULA, BOLSONARO, EDUARDO LEITE"
+                  placeholder="Ex: LULA, BOLSONARO, FHC"
                   value={formElectoralName}
                   onChange={(e) => setFormElectoralName(e.target.value)}
                   required
@@ -709,6 +858,287 @@ export const CandidatesPage: React.FC = () => {
                   }}
                 >
                   {submitting ? 'Salvando...' : 'Salvar Candidato'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL EDITAR CANDIDATO ── */}
+      {showEditModal && editingCandidate && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="animate-fade-in-scale"
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '540px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.75rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Pencil size={18} color="#60a5fa" />
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Editar Candidato
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    CARGO POLÍTICO *
+                  </label>
+                  <select
+                    value={editPositionId}
+                    onChange={(e) => {
+                      setEditPositionId(e.target.value);
+                      const p = positions.find((pos) => pos.id === e.target.value);
+                      if (p) {
+                        const isNat =
+                          p.scope === 'NACIONAL' ||
+                          p.isNational ||
+                          ['Presidente', 'Vice-Presidente'].includes(p.name);
+                        setEditIsNational(isNat);
+                        if (isNat) setEditStateId('');
+                      }
+                    }}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  >
+                    {positions.map((pos) => (
+                      <option key={pos.id} value={pos.id}>
+                        {pos.name} ({pos.scope || (pos.isNational ? 'NACIONAL' : 'ESTADUAL')})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    NÚMERO NA URNA *
+                  </label>
+                  <input
+                    type="text"
+                    value={editNumber}
+                    onChange={(e) => setEditNumber(e.target.value.replace(/\D/g, ''))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    SIGLA DO PARTIDO *
+                  </label>
+                  <input
+                    type="text"
+                    value={editParty}
+                    onChange={(e) => setEditParty(e.target.value.toUpperCase())}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    NOME ELEITORAL *
+                  </label>
+                  <input
+                    type="text"
+                    value={editElectoralName}
+                    onChange={(e) => setEditElectoralName(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  NOME COMPLETO DO CANDIDATO
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  VICE / SUPLENTE (OPCIONAL)
+                </label>
+                <input
+                  type="text"
+                  value={editViceName}
+                  onChange={(e) => setEditViceName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    ESTADO {editIsNational ? '(CARGO NACIONAL)' : '(OBRIGATÓRIO SE ESTADUAL)'}
+                  </label>
+                  <select
+                    value={editStateId}
+                    onChange={(e) => setEditStateId(e.target.value)}
+                    disabled={editIsNational}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: editIsNational ? '#64748b' : 'white',
+                    }}
+                  >
+                    <option value="">{editIsNational ? 'Âmbito Nacional (Todos os estados)' : 'Selecione o estado...'}</option>
+                    {states.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name} ({st.abbreviation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    NOVA FOTO (DEIXE VAZIO PARA MANTER ATUAL)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setEditPhoto(e.target.files?.[0] || null)}
+                    style={{
+                      width: '100%',
+                      padding: '0.6rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.8rem',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <input
+                  type="checkbox"
+                  id="editIsActive"
+                  checked={editIsActive}
+                  onChange={(e) => setEditIsActive(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="editIsActive" style={{ fontSize: '0.85rem', color: '#cbd5e1', cursor: 'pointer' }}>
+                  Candidato Ativo (apto a receber votos na urna)
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  style={{
+                    padding: '0.65rem 1.25rem',
+                    background: '#334155',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    padding: '0.65rem 1.5rem',
+                    background: 'linear-gradient(135deg, #1e3d5e, #1565c0)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {submitting ? 'Atualizando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>

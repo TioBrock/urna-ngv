@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { electionsApi, positionsApi } from '../../services/api';
 import { Election, Position } from '../../types';
-import { ArrowLeft, Plus, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Users, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const ElectionDetailPage: React.FC = () => {
@@ -11,6 +11,7 @@ export const ElectionDetailPage: React.FC = () => {
   const [basePositions, setBasePositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddPosModal, setShowAddPosModal] = useState(false);
+  const [showEditPosModal, setShowEditPosModal] = useState(false);
 
   // Form para adicionar cargo à eleição
   const [selectedBasePosId, setSelectedBasePosId] = useState('');
@@ -19,6 +20,13 @@ export const ElectionDetailPage: React.FC = () => {
   const [posDigits, setPosDigits] = useState(2);
   const [posIsNational, setPosIsNational] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Form para editar cargo da eleição
+  const [editingElectionPos, setEditingElectionPos] = useState<any | null>(null);
+  const [editPosOrder, setEditPosOrder] = useState(1);
+  const [editPosSlots, setEditPosSlots] = useState(1);
+  const [editPosDigits, setEditPosDigits] = useState(2);
+  const [editPosIsNational, setEditPosIsNational] = useState(false);
 
   const fetchDetails = () => {
     if (!id) return;
@@ -74,6 +82,39 @@ export const ElectionDetailPage: React.FC = () => {
       fetchDetails();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao adicionar cargo');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartEditPos = (ep: any) => {
+    setEditingElectionPos(ep);
+    setEditPosOrder(ep.order);
+    setEditPosSlots(ep.slots);
+    setEditPosDigits(ep.digitCount);
+    setEditPosIsNational(ep.isNational);
+    setShowEditPosModal(true);
+  };
+
+  const handleUpdateElectionPos = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingElectionPos) return;
+
+    setSubmitting(true);
+    try {
+      await positionsApi.updateElectionPosition(editingElectionPos.id, {
+        order: Number(editPosOrder),
+        slots: Number(editPosSlots),
+        digitCount: Number(editPosDigits),
+        isNational: editPosIsNational,
+      });
+
+      toast.success('Cargo atualizado com sucesso!');
+      setShowEditPosModal(false);
+      setEditingElectionPos(null);
+      fetchDetails();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao atualizar cargo');
     } finally {
       setSubmitting(false);
     }
@@ -279,20 +320,36 @@ export const ElectionDetailPage: React.FC = () => {
                     </td>
                     <td>{ep._count?.votes ?? 0}</td>
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        title="Remover Cargo"
-                        onClick={() => handleDeletePosition(ep.id)}
-                        style={{
-                          padding: '0.35rem 0.6rem',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          color: '#ef4444',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                        <button
+                          title="Editar Cargo"
+                          onClick={() => handleStartEditPos(ep)}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          title="Remover Cargo"
+                          onClick={() => handleDeletePosition(ep.id)}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -477,6 +534,165 @@ export const ElectionDetailPage: React.FC = () => {
                   }}
                 >
                   {submitting ? 'Salvando...' : 'Adicionar Cargo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Editar Cargo da Eleição */}
+      {showEditPosModal && editingElectionPos && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+          onClick={() => setShowEditPosModal(false)}
+        >
+          <div
+            className="animate-fade-in-scale"
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '480px',
+              padding: '1.75rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Pencil size={18} color="#60a5fa" />
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Editar Cargo: {editingElectionPos.position?.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowEditPosModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateElectionPos} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    ORDEM NA URNA
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editPosOrder}
+                    onChange={(e) => setEditPosOrder(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    QTD. DÍGITOS
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={editPosDigits}
+                    onChange={(e) => setEditPosDigits(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  VAGAS A ELEGER
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={editPosSlots}
+                  onChange={(e) => setEditPosSlots(Number(e.target.value))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <input
+                  type="checkbox"
+                  id="editPosIsNational"
+                  checked={editPosIsNational}
+                  onChange={(e) => setEditPosIsNational(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="editPosIsNational" style={{ fontSize: '0.85rem', color: '#cbd5e1', cursor: 'pointer' }}>
+                  Cargo de Âmbito Nacional (candidatos concorrem em todos os estados)
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditPosModal(false)}
+                  style={{
+                    padding: '0.65rem 1.25rem',
+                    background: '#334155',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    padding: '0.65rem 1.5rem',
+                    background: 'linear-gradient(135deg, #1e3d5e, #1565c0)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {submitting ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>

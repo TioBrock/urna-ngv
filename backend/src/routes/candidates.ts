@@ -72,19 +72,21 @@ const candidateSchema = z.object({
 
 // GET /api/candidates — lista com filtros
 candidatesRouter.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { electionId, positionId, stateId, search } = req.query;
+  const { electionId, positionId, stateId, party, search } = req.query;
 
   const candidates = await prisma.candidate.findMany({
     where: {
       ...(electionId ? { electionId: String(electionId) } : {}),
       ...(positionId ? { positionId: String(positionId) } : {}),
       ...(stateId ? { stateId: String(stateId) } : {}),
+      ...(party ? { party: { equals: String(party), mode: 'insensitive' as const } } : {}),
       ...(search
         ? {
             OR: [
-              { name: { contains: String(search), mode: 'insensitive' } },
-              { electoralName: { contains: String(search), mode: 'insensitive' } },
+              { name: { contains: String(search), mode: 'insensitive' as const } },
+              { electoralName: { contains: String(search), mode: 'insensitive' as const } },
               { number: { contains: String(search) } },
+              { party: { contains: String(search), mode: 'insensitive' as const } },
             ],
           }
         : {}),
@@ -97,6 +99,26 @@ candidatesRouter.get('/', requireAuth, async (req: Request, res: Response): Prom
   });
 
   res.json(candidates);
+});
+
+// GET /api/candidates/parties — lista apenas partidos cadastrados
+candidatesRouter.get('/parties', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { electionId } = req.query;
+
+  const candidates = await prisma.candidate.findMany({
+    where: {
+      ...(electionId ? { electionId: String(electionId) } : {}),
+    },
+    select: { party: true },
+    distinct: ['party'],
+    orderBy: { party: 'asc' },
+  });
+
+  const parties = candidates
+    .map((c) => c.party.trim().toUpperCase())
+    .filter((p) => p.length > 0);
+
+  res.json(Array.from(new Set(parties)));
 });
 
 // GET /api/candidates/:id
