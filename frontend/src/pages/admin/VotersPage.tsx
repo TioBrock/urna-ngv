@@ -15,12 +15,21 @@ export const VotersPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
-    electionsApi.getAll().then((elecs) => {
-      setElections(elecs);
-      if (elecs.length > 0) {
-        setSelectedElectionId(elecs[0].id);
-      }
-    });
+    electionsApi
+      .getAll()
+      .then((elecs) => {
+        setElections(elecs);
+        if (elecs.length > 0) {
+          setSelectedElectionId(elecs[0].id);
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Erro ao listar eleições:', err);
+        toast.error('Erro ao carregar eleições');
+        setLoading(false);
+      });
   }, []);
 
   const fetchVoters = () => {

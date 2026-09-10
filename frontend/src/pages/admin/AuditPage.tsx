@@ -13,9 +13,14 @@ export const AuditPage: React.FC = () => {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   useEffect(() => {
-    electionsApi.getAll().then((elecs) => {
-      setElections(elecs);
-    });
+    electionsApi
+      .getAll()
+      .then((elecs) => {
+        setElections(elecs);
+      })
+      .catch((err) => {
+        console.error('Erro ao listar eleições:', err);
+      });
   }, []);
 
   const fetchLogs = () => {

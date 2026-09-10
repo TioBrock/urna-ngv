@@ -18,6 +18,7 @@ enum ElectionStatus {
   DRAFT      // Rascunho — em configuração
   SCHEDULED  // Agendada — configurada, não aberta
   OPEN       // Aberta — eleitores podem votar
+  PAUSED     // Pausada — votação temporariamente suspensa
   CLOSED     // Encerrada — novos votos bloqueados
 }
 
@@ -38,6 +39,7 @@ enum AuditEventType {
   ELECTION_UPDATED
   ELECTION_STATUS_CHANGED
   ELECTION_OPENED
+  ELECTION_PAUSED
   ELECTION_CLOSED
   POSITION_CREATED
   POSITION_UPDATED

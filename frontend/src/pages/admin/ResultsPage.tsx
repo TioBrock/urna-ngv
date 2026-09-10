@@ -13,13 +13,21 @@ export const ResultsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([electionsApi.getAll(), statesApi.getActive()]).then(([elecs, sts]) => {
-      setElections(elecs);
-      setStates(sts);
-      if (elecs.length > 0) {
-        setSelectedElectionId(elecs[0].id);
-      }
-    });
+    Promise.all([electionsApi.getAll(), statesApi.getActive()])
+      .then(([elecs, sts]) => {
+        setElections(elecs);
+        setStates(sts);
+        if (elecs.length > 0) {
+          setSelectedElectionId(elecs[0].id);
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Erro ao carregar dados:', err);
+        toast.error('Erro ao carregar dados iniciais');
+        setLoading(false);
+      });
   }, []);
 
   const fetchResults = () => {

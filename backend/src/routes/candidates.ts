@@ -16,6 +16,7 @@ try {
 import { prisma } from '../utils/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { auditService } from '../services/auditService';
+import { AppError } from '../middleware/errorHandler';
 
 export const candidatesRouter = Router();
 
@@ -24,8 +25,12 @@ const uploadDir = process.env.UPLOAD_DIR ?? './uploads';
 // Configurar multer para upload de fotos
 const storage = multer.diskStorage({
   destination: async (_req, _file, cb) => {
-    await fs.mkdir(uploadDir, { recursive: true });
-    cb(null, uploadDir);
+    try {
+      await fs.mkdir(uploadDir, { recursive: true });
+      cb(null, uploadDir);
+    } catch (err) {
+      cb(err as Error, uploadDir);
+    }
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -39,8 +44,11 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) cb(null, true);
-    else cb(new Error('Formato de imagem não suportado. Use JPG, PNG, WebP ou GIF.'));
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new AppError('Formato de imagem não suportado. Use JPG, PNG, WebP ou GIF.', 400));
+    }
   },
 });
 
@@ -140,10 +148,15 @@ candidatesRouter.post(
     }
 
     const position = await prisma.position.findUnique({ where: { id: result.data.positionId } });
+    if (!position) {
+      if (req.file) await fs.unlink(req.file.path).catch(() => {});
+      res.status(404).json({ error: 'Cargo selecionado não encontrado' });
+      return;
+    }
     const isPositionNational =
-      position?.scope === 'NACIONAL' ||
-      position?.isNational ||
-      ['Presidente', 'Vice-Presidente'].includes(position?.name ?? '');
+      position.scope === 'NACIONAL' ||
+      position.isNational ||
+      ['Presidente', 'Vice-Presidente'].includes(position.name ?? '');
 
     const rawStateId = result.data.stateId;
     const stateId = rawStateId && rawStateId.trim() !== '' ? rawStateId : null;

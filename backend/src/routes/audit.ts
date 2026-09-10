@@ -7,8 +7,8 @@ export const auditRouter = Router();
 // GET /api/audit/:electionId — log de auditoria com filtros
 auditRouter.get('/:electionId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { eventType, page = '1', limit = '100' } = req.query;
-  const pageNum = parseInt(String(page));
-  const limitNum = Math.min(parseInt(String(limit)), 500);
+  const pageNum = Math.max(1, parseInt(String(page)) || 1);
+  const limitNum = Math.max(1, Math.min(parseInt(String(limit)) || 100, 500));
 
   const where = {
     electionId: req.params.electionId,
@@ -40,8 +40,8 @@ auditRouter.get('/:electionId', requireAuth, async (req: Request, res: Response)
 // GET /api/audit/global — log global (todos os eventos, admin)
 auditRouter.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { page = '1', limit = '100' } = req.query;
-  const pageNum = parseInt(String(page));
-  const limitNum = Math.min(parseInt(String(limit)), 500);
+  const pageNum = Math.max(1, parseInt(String(page)) || 1);
+  const limitNum = Math.max(1, Math.min(parseInt(String(limit)) || 100, 500));
 
   const [logs, total] = await Promise.all([
     prisma.auditLog.findMany({

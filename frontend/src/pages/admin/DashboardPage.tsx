@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dashboardApi, electionsApi } from '../../services/api';
 import { DashboardData } from '../../types';
-import { Users, CheckCircle, Clock, Vote, RefreshCw, BarChart2 } from 'lucide-react';
+import { Users, CheckCircle, Clock, Vote, RefreshCw, BarChart2, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const DashboardPage: React.FC = () => {
@@ -48,10 +48,9 @@ export const DashboardPage: React.FC = () => {
     return <div style={{ color: '#94a3b8' }}>Carregando dados eleitorais...</div>;
   }
 
-  const { election, stats, recentVoters } = data || {
+  const { election, stats } = data || {
     election: null,
     stats: { voted: 0, inProgress: 0, totalVotes: 0, totalSessions: 0 },
-    recentVoters: [],
   };
 
   return (
@@ -177,7 +176,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Banner de Verificação de IP (Ativar/Desativar para Testes) */}
+          {/* Banner de Verificação de IP */}
           <div
             style={{
               marginTop: '1.25rem',
@@ -228,29 +227,10 @@ export const DashboardPage: React.FC = () => {
               {election.validateIp !== false ? 'Desativar Verificação (Modo Teste)' : 'Ativar Verificação (Modo Seguro)'}
             </button>
           </div>
-
-          {/* Lista de cargos */}
-          <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {election.positions.map((p, idx) => (
-              <span
-                key={idx}
-                style={{
-                  background: '#0f172a',
-                  border: '1px solid #334155',
-                  borderRadius: '6px',
-                  padding: '0.35rem 0.75rem',
-                  fontSize: '0.75rem',
-                  color: '#cbd5e1',
-                }}
-              >
-                {p.order}º {p.name} {p.slots > 1 ? `(${p.slots} vagas)` : ''}
-              </span>
-            ))}
-          </div>
         </div>
       ) : (
         <div className="admin-card" style={{ padding: '2rem', textAlign: 'center' }}>
-          <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>Nenhuma eleição ativa no momento.</p>
+          <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>Nenhuma eleição aberta no momento.</p>
           <Link
             to="/admin/eleicoes"
             style={{
@@ -266,65 +246,71 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Últimos Votantes */}
-      <div className="admin-card">
-        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>Últimos Eleitores Registrados</h3>
-          <Link to="/admin/votantes" style={{ fontSize: '0.8rem', color: '#60a5fa' }}>
-            Ver todos ➔
-          </Link>
-        </div>
+      {/* Progresso de Votos por Cargo */}
+      {election && election.positions.length > 0 && (
+        <div className="admin-card">
+          <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <TrendingUp size={18} color="#60a5fa" />
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>Progresso de Votos por Cargo</h3>
+          </div>
 
-        <div className="admin-table-wrapper">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Usuário Discord</th>
-                <th>Personagem RPG</th>
-                <th>Estado</th>
-                <th>Status</th>
-                <th>Conclusão</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentVoters.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', color: '#64748b', padding: '2rem' }}>
-                    Nenhum eleitor registrado até o momento
-                  </td>
-                </tr>
-              ) : (
-                recentVoters.map((v, idx) => (
-                  <tr key={idx}>
-                    <td>
-                      <strong style={{ color: 'white' }}>{v.discordName}</strong>
-                    </td>
-                    <td>{v.rpgName}</td>
-                    <td>{v.state ? `${v.state.name} (${v.state.abbreviation})` : '-'}</td>
-                    <td>
+          <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {election.positions.map((p, idx) => {
+              // Total esperado = votantes que concluíram × slots do cargo
+              const expectedVotes = stats.voted * p.slots;
+              const percent = expectedVotes > 0 ? Math.min(100, Math.round((p.votes / expectedVotes) * 100)) : 0;
+
+              return (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span
                         style={{
-                          padding: '0.2rem 0.5rem',
+                          background: '#0f172a',
+                          border: '1px solid #334155',
                           borderRadius: '4px',
+                          padding: '0.15rem 0.45rem',
                           fontSize: '0.7rem',
+                          color: '#60a5fa',
                           fontWeight: 700,
-                          background: v.status === 'VOTED' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
-                          color: v.status === 'VOTED' ? '#4ade80' : '#facc15',
                         }}
                       >
-                        {v.status === 'VOTED' ? 'VOTOU' : 'EM ANDAMENTO'}
+                        {p.order}º
                       </span>
-                    </td>
-                    <td style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
-                      {v.completedAt ? new Date(v.completedAt).toLocaleTimeString('pt-BR') : '-'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'white' }}>{p.name}</span>
+                      {p.slots > 1 && (
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>({p.slots} vagas)</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                      <strong style={{ color: 'white' }}>{p.votes}</strong> votos registrados
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: '8px',
+                      background: '#1e293b',
+                      borderRadius: '999px',
+                      border: '1px solid #334155',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${percent}%`,
+                        background: 'linear-gradient(90deg, #2563eb, #7c3aed)',
+                        borderRadius: '999px',
+                        transition: 'width 0.5s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -45,7 +45,12 @@ export const votingService = {
       throw new AppError('Eleição não encontrada ou não está aberta', 404);
     }
 
-    // 2. Verificar se o estado participa da eleição
+    // 2. Verificar se a eleição possui cargos configurados
+    if (election.electionPositions.length === 0) {
+      throw new AppError('Esta eleição ainda não possui cargos configurados para votação', 400);
+    }
+
+    // 3. Verificar se o estado participa da eleição
     if (election.electionStates.length === 0) {
       throw new AppError('Estado não participa desta eleição', 400);
     }
@@ -285,7 +290,11 @@ export const votingService = {
       const currentPosIndex = positions.findIndex((p) => p.id === electionPositionId);
       const currentPos = positions[currentPosIndex];
 
-      let nextPositionOrder = session.currentPositionOrder;
+      if (!currentPos) {
+        throw new AppError('Cargo não encontrado ou inativo nesta eleição', 400);
+      }
+
+      let nextPositionOrder = currentPos.order;
       let nextSlot = session.currentSlot;
       let isFinished = false;
 

@@ -71,8 +71,8 @@ const createElectionSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   year: z.number().int().min(1900).max(2100),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
+  startDate: z.string().optional().nullable().or(z.literal('')),
+  endDate: z.string().optional().nullable().or(z.literal('')),
   showResultsDuringVoting: z.boolean().default(false),
   sessionTimeoutHours: z.number().int().min(1).max(72).default(2),
   validateIp: z.boolean().default(true).optional(),
@@ -92,8 +92,8 @@ electionsRouter.post('/', requireAuth, async (req: AuthRequest, res: Response): 
   const election = await prisma.election.create({
     data: {
       ...data,
-      startDate: data.startDate ? new Date(data.startDate) : undefined,
-      endDate: data.endDate ? new Date(data.endDate) : undefined,
+      startDate: data.startDate && data.startDate.trim() !== '' ? new Date(data.startDate) : undefined,
+      endDate: data.endDate && data.endDate.trim() !== '' ? new Date(data.endDate) : undefined,
       electionStates: stateIds?.length
         ? { create: stateIds.map((stateId) => ({ stateId })) }
         : undefined,
@@ -141,8 +141,8 @@ electionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
       where: { id: req.params.id },
       data: {
         ...data,
-        startDate: data.startDate ? new Date(data.startDate) : undefined,
-        endDate: data.endDate ? new Date(data.endDate) : undefined,
+        startDate: data.startDate && data.startDate.trim() !== '' ? new Date(data.startDate) : (data.startDate === '' ? null : undefined),
+        endDate: data.endDate && data.endDate.trim() !== '' ? new Date(data.endDate) : (data.endDate === '' ? null : undefined),
       },
       include: { electionStates: { include: { state: true } } },
     });
@@ -159,7 +159,7 @@ electionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
 });
 
 const statusSchema = z.object({
-  status: z.enum(['DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED']),
+  status: z.enum(['DRAFT', 'SCHEDULED', 'OPEN', 'PAUSED', 'CLOSED']),
 });
 
 // PUT /api/elections/:id/status
@@ -176,8 +176,29 @@ electionsRouter.put('/:id/status', requireAuth, async (req: AuthRequest, res: Re
     return;
   }
 
-  // Só pode haver uma eleição OPEN por vez
+  // Só pode haver uma eleição OPEN por vez, e deve ter cargos e estados configurados
   if (result.data.status === 'OPEN') {
+    const electionToCheck = await prisma.election.findUnique({
+      where: { id: req.params.id },
+      include: {
+        electionPositions: { where: { isActive: true } },
+        electionStates: true,
+      },
+    });
+
+    if (!electionToCheck) {
+      res.status(404).json({ error: 'Eleição não encontrada' });
+      return;
+    }
+
+    if (electionToCheck.electionPositions.length === 0) {
+      throw new AppError('Não é possível abrir uma eleição sem cargos ativos configurados.', 400);
+    }
+
+    if (electionToCheck.electionStates.length === 0) {
+      throw new AppError('Não é possível abrir uma eleição sem estados participantes selecionados.', 400);
+    }
+
     const openElection = await prisma.election.findFirst({
       where: { status: 'OPEN', NOT: { id: req.params.id } },
     });
@@ -195,8 +216,9 @@ electionsRouter.put('/:id/status', requireAuth, async (req: AuthRequest, res: Re
     },
   });
 
-  const eventMap: Record<string, 'ELECTION_STATUS_CHANGED' | 'ELECTION_OPENED' | 'ELECTION_CLOSED'> = {
+  const eventMap: Record<string, 'ELECTION_STATUS_CHANGED' | 'ELECTION_OPENED' | 'ELECTION_PAUSED' | 'ELECTION_CLOSED'> = {
     OPEN: 'ELECTION_OPENED',
+    PAUSED: 'ELECTION_PAUSED',
     CLOSED: 'ELECTION_CLOSED',
     DRAFT: 'ELECTION_STATUS_CHANGED',
     SCHEDULED: 'ELECTION_STATUS_CHANGED',
@@ -254,6 +276,9 @@ electionsRouter.delete('/:id', requireAuth, async (req: AuthRequest, res: Respon
     throw new AppError('Apenas eleições em rascunho podem ser excluídas', 409);
   }
 
-  await prisma.election.delete({ where: { id: req.params.id } });
+  await prisma.$transaction([
+    prisma.auditLog.updateMany({ where: { electionId: req.params.id }, data: { electionId: null } }),
+    prisma.election.delete({ where: { id: req.params.id } }),
+  ]);
   res.json({ message: 'Eleição excluída com sucesso' });
 });

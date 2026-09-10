@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import 'express-async-errors'; // captura throws em handlers async automaticamente
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -35,17 +36,20 @@ app.use(cors({
 }));
 
 // ── Rate limiting ──
+const isDev = process.env.NODE_ENV !== 'production';
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 200,
+  max: isDev ? 50000 : 2000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/health',
   message: { error: 'Muitas requisições. Tente novamente em alguns minutos.' },
 });
 
 const votingLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minuto
-  max: 20,
+  max: isDev ? 10000 : 120,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas requisições de votação. Aguarde um momento.' },
@@ -59,7 +63,13 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // ── Static files (fotos de candidatos) ──
+import fs from 'fs';
 const uploadDir = process.env.UPLOAD_DIR ?? './uploads';
+try {
+  fs.mkdirSync(path.resolve(uploadDir), { recursive: true });
+} catch {
+  // Ignora se já existir
+}
 app.use('/uploads', express.static(path.resolve(uploadDir)));
 
 // ── Routes ──
@@ -90,6 +100,15 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📊 Ambiente: ${process.env.NODE_ENV ?? 'development'}`);
+});
+
+// ── Proteção global: impede o processo de morrer por erros não capturados ──
+process.on('uncaughtException', (err) => {
+  console.error('❌ uncaughtException (processo mantido vivo):', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ unhandledRejection (processo mantido vivo):', reason);
 });
 
 export default app;

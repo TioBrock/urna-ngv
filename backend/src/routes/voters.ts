@@ -7,8 +7,8 @@ export const votersRouter = Router();
 // GET /api/voters/:electionId — lista de votantes (admin)
 votersRouter.get('/:electionId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { status, stateId, search, page = '1', limit = '50' } = req.query;
-  const pageNum = parseInt(String(page));
-  const limitNum = Math.min(parseInt(String(limit)), 200);
+  const pageNum = Math.max(1, parseInt(String(page)) || 1);
+  const limitNum = Math.max(1, Math.min(parseInt(String(limit)) || 50, 200));
   const skip = (pageNum - 1) * limitNum;
 
   const where = {

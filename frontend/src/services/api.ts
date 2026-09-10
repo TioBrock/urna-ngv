@@ -117,7 +117,7 @@ export const electionsApi = {
     return res.data;
   },
   updateStatus: async (id: string, status: string): Promise<Election> => {
-    const res = await api.patch(`/elections/${id}/status`, { status });
+    const res = await api.put(`/elections/${id}/status`, { status });
     return res.data;
   },
   toggleValidateIp: async (id: string, validateIp: boolean): Promise<Election> => {

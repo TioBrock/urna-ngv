@@ -178,6 +178,7 @@ export interface DashboardData {
       name: string;
       order: number;
       slots: number;
+      votes: number;
     }[];
   } | null;
   stats: {
@@ -186,11 +187,4 @@ export interface DashboardData {
     totalVotes: number;
     totalSessions: number;
   };
-  recentVoters: {
-    discordName: string;
-    rpgName: string;
-    status: VoterStatus;
-    completedAt?: string | null;
-    state?: { name: string; abbreviation: string };
-  }[];
 }

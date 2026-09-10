@@ -228,11 +228,23 @@ positionsRouter.put('/election/:electionId/reorder', requireAuth, async (req: Au
     return;
   }
 
-  await prisma.$transaction(
-    result.data.positions.map((p) =>
-      prisma.electionPosition.update({ where: { id: p.id }, data: { order: p.order } })
-    )
-  );
+  await prisma.$transaction(async (tx) => {
+    // Fase 1: ordens temporárias negativas para não colidir na restrição única @@unique([electionId, order])
+    for (let i = 0; i < result.data.positions.length; i++) {
+      const p = result.data.positions[i];
+      await tx.electionPosition.update({
+        where: { id: p.id },
+        data: { order: -(i + 1) },
+      });
+    }
+    // Fase 2: aplicar as ordens definitivas desejadas
+    for (const p of result.data.positions) {
+      await tx.electionPosition.update({
+        where: { id: p.id },
+        data: { order: p.order },
+      });
+    }
+  });
 
   res.json({ message: 'Ordem atualizada com sucesso' });
 });
