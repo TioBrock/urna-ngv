@@ -32,8 +32,8 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
   const { stateId } = req.query;
 
   // Totais gerais e por estado da eleição (sem depender de filtro)
-  const [totalVotesOverall, totalVotersOverall, electionStates, votesByStateGroup, votersByStateGroup] = await Promise.all([
-    prisma.vote.count({ where: { electionId: req.params.electionId } }),
+  const [totalVotersOverall, electionStates, votesByStateGroup, votersByStateGroup] = await Promise.all([
+    // totalVotes = quantidade de eleitores que votaram (não soma de votos por cargo)
     prisma.voterSession.count({ where: { electionId: req.params.electionId, status: 'VOTED' } }),
     prisma.electionState.findMany({
       where: { electionId: req.params.electionId },
@@ -59,7 +59,7 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
       state: es.state,
       votes: stateVotes,
       voters: stateVoters,
-      percentage: totalVotesOverall > 0 ? ((stateVotes / totalVotesOverall) * 100).toFixed(1) : '0.0',
+      percentage: totalVotersOverall > 0 ? ((stateVoters / totalVotersOverall) * 100).toFixed(1) : '0.0',
     };
   });
 
@@ -139,7 +139,7 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
   res.json({
     election: { id: election.id, name: election.name, status: election.status },
     overview: {
-      totalVotes: totalVotesOverall,
+      totalVotes: totalVotersOverall,
       totalVoters: totalVotersOverall,
       byState: statesOverview,
     },
