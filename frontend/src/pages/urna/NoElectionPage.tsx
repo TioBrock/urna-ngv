@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 
 export const NoElectionPage: React.FC = () => {
   return (
@@ -51,21 +50,6 @@ export const NoElectionPage: React.FC = () => {
           >
             Verificar Novamente
           </button>
-          <Link
-            to="/admin/login"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '0.65rem 1.25rem',
-              fontSize: '0.85rem',
-              color: '#1565c0',
-              border: '1px solid #dde3ec',
-              borderRadius: '8px',
-              fontWeight: 600,
-            }}
-          >
-            Acesso Administrativo
-          </Link>
         </div>
       </div>
     </div>
