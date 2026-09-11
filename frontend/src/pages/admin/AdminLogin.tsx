@@ -139,18 +139,6 @@ export const AdminLogin: React.FC = () => {
             </div>
           </div>
 
-          <div
-            style={{
-              background: 'rgba(59, 130, 246, 0.08)',
-              border: '1px solid rgba(59, 130, 246, 0.2)',
-              borderRadius: '6px',
-              padding: '0.6rem 0.8rem',
-              fontSize: '0.75rem',
-              color: '#93c5fd',
-            }}
-          >
-            💡 <strong>Credenciais Padrão:</strong> admin@urna.local / admin123
-          </div>
 
           <button
             type="submit"
