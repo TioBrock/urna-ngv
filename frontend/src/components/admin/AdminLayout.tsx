@@ -1,5 +1,5 @@
-import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Vote,
@@ -11,13 +11,43 @@ import {
   ShieldAlert,
   LogOut,
   ExternalLink,
+  Menu,
+  X,
 } from 'lucide-react';
 import { authService } from '../../services/api';
 import toast from 'react-hot-toast';
 
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Fecha sidebar ao trocar de rota (mobile)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Fecha sidebar ao pressionar Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Bloqueia scroll do body quando sidebar está aberta no mobile
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
 
   const handleLogout = async () => {
     try {
@@ -45,8 +75,17 @@ export const AdminLayout: React.FC = () => {
 
   return (
     <div className="admin-layout">
+      {/* Overlay mobile — fecha ao clicar fora da sidebar */}
+      {sidebarOpen && (
+        <div
+          className="admin-sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="admin-sidebar-logo">
           <div className="admin-sidebar-logo-icon">
             <Vote size={20} color="white" />
@@ -55,6 +94,14 @@ export const AdminLayout: React.FC = () => {
             <div className="admin-sidebar-logo-title">URNA ELETRÔNICA</div>
             <div className="admin-sidebar-logo-sub">Painel Administrativo NGV</div>
           </div>
+          {/* Botão fechar sidebar no mobile */}
+          <button
+            className="admin-sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Fechar menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="admin-nav">
@@ -114,9 +161,19 @@ export const AdminLayout: React.FC = () => {
       {/* Área Principal */}
       <main className="admin-main">
         <header className="admin-topbar">
+          {/* Botão hambúrguer — visível apenas em mobile */}
+          <button
+            className="admin-hamburger"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Abrir menu"
+          >
+            <Menu size={22} />
+          </button>
+
           <div className="admin-page-title">Sistema Eleitoral — NGV</div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ fontSize: '0.85rem', color: 'var(--color-admin-muted)' }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--color-admin-muted)' }} className="admin-user-label">
               Logado como: <strong style={{ color: 'white' }}>{user.name || user.email || 'Admin'}</strong>
             </div>
             <button

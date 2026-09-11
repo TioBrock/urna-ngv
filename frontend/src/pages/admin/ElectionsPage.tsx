@@ -158,7 +158,7 @@ export const ElectionsPage: React.FC = () => {
 
       {/* Tabela de Eleições */}
       <div className="admin-card">
-        <div className="admin-table-wrapper">
+        <div className="admin-table-wrapper admin-table-desktop">
           <table className="admin-table">
             <thead>
               <tr>
@@ -169,7 +169,7 @@ export const ElectionsPage: React.FC = () => {
                 <th>Cargos</th>
                 <th>Candidatos</th>
                 <th>Votantes</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
+                <th style={{ textAlign: 'right', minWidth: '150px', whiteSpace: 'nowrap' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -225,8 +225,8 @@ export const ElectionsPage: React.FC = () => {
                     <td>{elec._count?.electionPositions ?? 0}</td>
                     <td>{elec._count?.candidates ?? 0}</td>
                     <td>{elec._count?.voterSessions ?? 0}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: '150px' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.4rem', whiteSpace: 'nowrap' }}>
                         {/* Controle de Status */}
                         {elec.status === 'DRAFT' || elec.status === 'PAUSED' ? (
                           <button
@@ -314,6 +314,177 @@ export const ElectionsPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Celular */}
+        <div className="admin-cards-mobile">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+              Carregando eleições...
+            </div>
+          ) : elections.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+              Nenhuma eleição cadastrada. Clique em "Nova Eleição" acima.
+            </div>
+          ) : (
+            elections.map((elec) => (
+              <div key={elec.id} className="admin-mobile-card">
+                <div className="admin-mobile-card-header">
+                  <div>
+                    <strong style={{ color: 'white', fontSize: '1rem', display: 'block' }}>{elec.name}</strong>
+                    {elec.description && (
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{elec.description}</span>
+                    )}
+                  </div>
+                  <div>{getStatusBadge(elec.status)}</div>
+                </div>
+
+                <div className="admin-mobile-card-grid">
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">ANO</span>
+                    <span className="admin-mobile-card-value">{elec.year}</span>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">VERIFICAÇÃO IP</span>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleValidateIp(elec.id, elec.validateIp !== false)}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                      >
+                        <span
+                          style={{
+                            padding: '0.15rem 0.4rem',
+                            borderRadius: '4px',
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            background: elec.validateIp !== false ? 'rgba(59, 130, 246, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                            color: elec.validateIp !== false ? '#60a5fa' : '#facc15',
+                          }}
+                        >
+                          {elec.validateIp !== false ? '🛡️ 1 VOTO/IP' : '⚡ MODO TESTE'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">CARGOS</span>
+                    <span className="admin-mobile-card-value">{elec._count?.electionPositions ?? 0}</span>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">CANDIDATOS</span>
+                    <span className="admin-mobile-card-value">{elec._count?.candidates ?? 0}</span>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">VOTANTES</span>
+                    <span className="admin-mobile-card-value">{elec._count?.voterSessions ?? 0}</span>
+                  </div>
+                </div>
+
+                <div className="admin-mobile-card-actions">
+                  {elec.status === 'DRAFT' || elec.status === 'PAUSED' ? (
+                    <button
+                      title="Abrir Votação"
+                      onClick={() => handleStatusChange(elec.id, 'OPEN')}
+                      style={{
+                        padding: '0.4rem 0.75rem',
+                        background: 'rgba(34, 197, 94, 0.2)',
+                        color: '#4ade80',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Play size={14} /> Abrir
+                    </button>
+                  ) : null}
+
+                  {elec.status === 'OPEN' ? (
+                    <>
+                      <button
+                        title="Pausar Votação"
+                        onClick={() => handleStatusChange(elec.id, 'PAUSED')}
+                        style={{
+                          padding: '0.35rem 0.6rem',
+                          background: 'rgba(234, 179, 8, 0.2)',
+                          color: '#facc15',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Pause size={14} /> Pausar
+                      </button>
+                      <button
+                        title="Encerrar Votação"
+                        onClick={() => handleStatusChange(elec.id, 'CLOSED')}
+                        style={{
+                          padding: '0.35rem 0.6rem',
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          color: '#f87171',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Square size={14} /> Encerrar
+                      </button>
+                    </>
+                  ) : null}
+
+                  <Link
+                    to={`/admin/eleicoes/${elec.id}`}
+                    title="Detalhes e Configuração"
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      background: '#334155',
+                      color: '#e2e8f0',
+                      borderRadius: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Settings size={14} /> Config
+                  </Link>
+
+                  <button
+                    title="Remover"
+                    onClick={() => handleDelete(elec.id, elec.name)}
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

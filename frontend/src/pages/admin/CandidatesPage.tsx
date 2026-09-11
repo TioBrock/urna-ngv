@@ -398,7 +398,7 @@ export const CandidatesPage: React.FC = () => {
 
       {/* Tabela de Candidatos */}
       <div className="admin-card">
-        <div className="admin-table-wrapper">
+        <div className="admin-table-wrapper admin-table-desktop">
           <table className="admin-table">
             <thead>
               <tr>
@@ -572,6 +572,120 @@ export const CandidatesPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Celular */}
+        <div className="admin-cards-mobile">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+              Carregando candidatos...
+            </div>
+          ) : candidates.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+              Nenhum candidato encontrado com os filtros selecionados.
+            </div>
+          ) : (
+            candidates.map((c) => (
+              <div key={c.id} className="admin-mobile-card">
+                <div className="admin-mobile-card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '50px',
+                        borderRadius: '4px',
+                        background: '#0f172a',
+                        border: '1px solid #334155',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {c.photoUrl ? (
+                        <img src={c.photoUrl} alt={c.electoralName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <User size={20} color="#64748b" />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#60a5fa', fontSize: '1.1rem' }}>
+                          {c.number}
+                        </span>
+                        <strong style={{ color: 'white', fontSize: '0.95rem' }}>{c.electoralName}</strong>
+                      </div>
+                      {c.name !== c.electoralName && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block' }}>{c.name}</span>
+                      )}
+                    </div>
+                  </div>
+                  <span style={{ fontWeight: 700, color: '#cbd5e1', fontSize: '0.8rem', background: '#0f172a', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #334155' }}>
+                    {c.party}
+                  </span>
+                </div>
+
+                <div className="admin-mobile-card-grid">
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">CARGO</span>
+                    <span className="admin-mobile-card-value">{c.position?.name || '-'}</span>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">ESTADO / ÂMBITO</span>
+                    <span className="admin-mobile-card-value">
+                      {c.state ? `${c.state.name} (${c.state.abbreviation})` : 'Nacional'}
+                    </span>
+                  </div>
+                  {c.viceCandidateName && (
+                    <div className="admin-mobile-card-field" style={{ gridColumn: 'span 2' }}>
+                      <span className="admin-mobile-card-label">VICE / SUPLENTE</span>
+                      <span className="admin-mobile-card-value">{c.viceCandidateName}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="admin-mobile-card-actions">
+                  <button
+                    onClick={() => handleStartEdit(c)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      color: '#60a5fa',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(c.id, c.electoralName)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Trash2 size={14} /> Excluir
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

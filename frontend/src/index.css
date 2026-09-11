@@ -205,42 +205,63 @@ a { color: inherit; text-decoration: none; }
    COMPONENTES DA URNA
    ═══════════════════════════════════════════════════ ── */
 
+/* ═══ URNA — BASE (mobile-first) ═══ */
+
+/* Página da urna: ocupa exatamente a viewport sem scroll externo */
 .urna-page {
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #0f2440 0%, #1a3a5c 50%, #0f2440 100%);
-  padding: var(--space-4);
+  padding: var(--space-2);
+  overflow: hidden;
 }
 
+/* Container: coluna sempre, apenas o frame interno muda para row no desktop */
 .urna-container {
   width: 100%;
   max-width: 480px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 0.75rem;
+}
+
+/* Dica do teclado físico */
+.urna-keyboard-hint {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  display: none; /* escondido no mobile */
 }
 
 /* Frame físico da urna */
 .urna-frame {
   background: linear-gradient(180deg, #1e3d5e 0%, #152e4a 100%);
   border-radius: var(--radius-xl) var(--radius-xl) var(--radius-lg) var(--radius-lg);
-  padding: var(--space-3);
+  padding: var(--space-2);
   box-shadow: var(--shadow-urna), inset 0 1px 0 rgba(255,255,255,.08);
   border: 1px solid rgba(255,255,255,.05);
+  display: flex;
+  flex-direction: column;
 }
 
-/* Tela da urna */
+/* Tela da urna: ocupa o espaço disponível e rola internamente */
 .urna-screen {
   background: var(--color-urna-screen);
   border-radius: var(--radius-md);
-  min-height: 260px;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   border: 2px solid #b0bec5;
   box-shadow: inset 0 2px 8px rgba(0,0,0,.15);
   position: relative;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* scroll suave interno */
+  overscroll-behavior: contain;
 }
 
 .urna-screen::before {
@@ -516,18 +537,18 @@ a { color: inherit; text-decoration: none; }
 /* Botões funcionais */
 .urna-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
 }
 
 .urna-btn {
-  padding: var(--space-3) var(--space-2);
+  padding: var(--space-3) var(--space-1);
   border: none;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
   font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: white;
   cursor: pointer;
@@ -535,6 +556,14 @@ a { color: inherit; text-decoration: none; }
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   position: relative;
+  box-sizing: border-box;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .urna-btn:disabled {
@@ -564,9 +593,9 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(180deg, #43a047 0%, #2e7d32 100%);
   color: #111827;
   box-shadow: 0 4px 0 #1b5e20, 0 2px 4px rgba(0,0,0,.25);
-  font-size: 0.8rem;
-  padding-top: calc(var(--space-3) + 4px);
-  padding-bottom: calc(var(--space-3) + 4px);
+  font-size: 0.75rem;
+  padding-top: calc(var(--space-3) + 2px);
+  padding-bottom: calc(var(--space-3) + 2px);
 }
 .urna-btn-confirm:hover:not(:disabled) {
   background: linear-gradient(180deg, #4caf50 0%, #388e3c 100%);
@@ -585,11 +614,12 @@ a { color: inherit; text-decoration: none; }
   justify-content: center;
   background: linear-gradient(135deg, #0f2440 0%, #1a3a5c 50%, #0f2440 100%);
   padding: var(--space-4);
+  overflow-y: auto;
 }
 
 .identification-card {
   width: 100%;
-  max-width: 440px;
+  max-width: 520px;
   background: white;
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-urna);
@@ -1269,43 +1299,505 @@ a { color: inherit; text-decoration: none; }
   animation: fadeInScale 0.3s ease;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVIDADE
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Admin Mobile Toggle ─────────────────────────────── */
+
+/* Hambúrguer — visível só em mobile */
+.admin-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-admin-text);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+.admin-hamburger:hover {
+  background: rgba(255,255,255,.08);
+}
+
+/* Botão X dentro da sidebar — visível só em mobile */
+.admin-sidebar-close {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-admin-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: color var(--transition-fast);
+}
+.admin-sidebar-close:hover {
+  color: white;
+}
+
+/* Overlay escuro ao abrir sidebar no mobile */
+.admin-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(2px);
+  z-index: 99;
+  animation: fadeIn 0.2s ease;
+}
+
+/* Label do usuário logado — esconde em telas muito pequenas */
+.admin-user-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+/* Layout responsivo dos resultados: lado a lado no desktop, empilhado no tablet/mobile */
+.results-grid-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .results-grid-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ══ Cards Mobile no Painel Administrativo ══════════════ */
+.admin-cards-mobile {
+  display: none;
+}
+
+.admin-table-desktop {
+  display: block;
+}
+
+.admin-mobile-card {
+  background: var(--color-admin-surface);
+  border: 1px solid var(--color-admin-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color var(--transition-fast);
+}
+
+.admin-mobile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: var(--space-2);
+}
+
+.admin-mobile-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.admin-mobile-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-mobile-card-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-admin-muted);
+  letter-spacing: 0.05em;
+}
+
+.admin-mobile-card-value {
+  font-size: 0.85rem;
+  color: white;
+  font-weight: 500;
+}
+
+.admin-mobile-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+/* ══ Desktop: Urna horizontal e maior ══════════════════ */
+@media (min-width: 900px) {
+  .urna-page {
+    padding: var(--space-4);
+  }
+
+  /* Container continua COLUNA -- apenas o frame interno vai para row */
+  .urna-container {
+    max-width: 960px;
+    width: 100%;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* Frame: row = tela esq + teclado dir */
+  .urna-frame {
+    flex-direction: row;
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+    align-items: stretch;
+  }
+
+  .urna-screen {
+    flex: 1;
+    min-height: 480px;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    border-right: 1px solid #b0bec5;
+    padding: var(--space-6) var(--space-7);
+    font-size: 1.05em;
+    overflow-y: visible;
+  }
+
+  .urna-position-name { font-size: 1.4rem; }
+
+  .urna-number-box {
+    width: 48px;
+    height: 56px;
+    font-size: 1.8rem;
+  }
+
+  .urna-candidate-name { font-size: 1.15rem; }
+
+  .urna-candidate-photo {
+    width: 88px;
+    height: 110px;
+  }
+
+  /* Teclado proporcional com largura suficiente para caber todos os botões sem vazar */
+  .urna-keyboard {
+    width: 300px;
+    flex-shrink: 0;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+    margin-top: 0;
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-3);
+    box-sizing: border-box;
+  }
+
+  .urna-keypad {
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .urna-key {
+    font-size: 1.5rem;
+    aspect-ratio: 1.1;
+  }
+
+  .urna-actions {
+    gap: var(--space-2);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .urna-btn {
+    padding: var(--space-3) var(--space-1);
+    font-size: 0.72rem;
+  }
+
+  .urna-btn-confirm {
+    font-size: 0.75rem;
+    padding-top: calc(var(--space-3) + 2px);
+    padding-bottom: calc(var(--space-3) + 2px);
+  }
+
+  .urna-keyboard-hint {
+    display: block;
+    width: 100%;
+    text-align: center;
+    font-size: 0.75rem;
+  }
+
+  .identification-card { max-width: 560px; }
+  .identification-header h1 { font-size: 1.2rem; }
+  .identification-body { padding: var(--space-8) var(--space-10); }
+}
+
+/* ══ Tablet (600px – 899px): urna vertical maior ════════════ */
+@media (min-width: 600px) and (max-width: 899px) {
+  .urna-page { padding: var(--space-3); }
+  .urna-container { max-width: 520px; }
+  .urna-frame { padding: var(--space-3); }
+  .urna-screen { padding: var(--space-4) var(--space-5); }
+  .urna-keyboard-hint { display: block; }
+}
+
+/* ══ Tablet & Mobile (<= 1024px): Admin com sidebar gaveta responsiva ══════════════════ */
+@media (max-width: 1024px) {
+  .admin-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-sidebar-overlay { display: block; }
+
   .admin-sidebar {
     transform: translateX(-100%);
+    box-shadow: none;
   }
 
   .admin-sidebar.open {
     transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,.4);
   }
 
   .admin-main {
     margin-left: 0;
+    min-width: 0;
+    width: 100%;
   }
+
+  .admin-topbar {
+    gap: var(--space-2);
+    padding: 0 var(--space-4);
+  }
+
+  .admin-page-title {
+    font-size: 0.9rem;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .admin-content {
+    padding: var(--space-4);
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .admin-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ══ Mobile: Urna e Admin (<= 768px) ══════════════════ */
+@media (max-width: 768px) {
+  .admin-user-label { display: none; }
 
   .grid-2 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
 
+  /* Alternância de tabela para cards no celular */
+  .admin-table-desktop {
+    display: none !important;
+  }
+
+  .admin-cards-mobile {
+    display: flex !important;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: var(--space-2) var(--space-2);
+    font-size: 0.78rem;
+  }
+
+  /* Urna mobile: frame preenche viewport sem empurrar teclado */
+  .urna-page {
+    height: 100dvh;
+    padding: var(--space-2);
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+  }
+
   .urna-container {
     max-width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    gap: 0;
   }
-}
 
-@media (max-width: 480px) {
-  .identification-body {
-    padding: var(--space-5) var(--space-5);
+  .urna-frame {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: var(--space-2);
   }
 
   .urna-screen {
-    padding: var(--space-3) var(--space-4);
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-2) var(--space-3);
   }
 
+  .urna-state-box {
+    padding: var(--space-2) var(--space-3);
+    margin: var(--space-2) 0;
+  }
+
+  .urna-state-title {
+    font-size: 1rem;
+    margin-bottom: 2px;
+  }
+
+  .urna-state-text {
+    font-size: 0.75rem;
+  }
+
+  /* Teclado travado no rodapé sempre 100% visível */
+  .urna-keyboard {
+    flex-shrink: 0;
+    padding: var(--space-2);
+    margin-top: var(--space-2);
+    border-radius: var(--radius-md);
+  }
+
+  .urna-keypad {
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .urna-key {
+    height: 42px;
+    aspect-ratio: unset;
+    font-size: 1.25rem;
+  }
+
+  .urna-actions {
+    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .urna-btn {
+    padding: 8px 3px;
+    font-size: 0.65rem;
+    white-space: nowrap;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .urna-btn-confirm {
+    font-size: 0.68rem;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+/* ══ Mobile pequeno (<= 480px): compacta elementos ══════════ */
+@media (max-width: 480px) {
+  .urna-header {
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+
+  .urna-logo { width: 28px; height: 28px; }
+  .urna-institution { font-size: 0.5rem; }
+  .urna-election-name { font-size: 0.65rem; }
+  .urna-position-name { font-size: 0.85rem; margin-bottom: 2px; }
+  .urna-position-label { font-size: 0.55rem; margin-bottom: 0; }
+  .urna-slot-label { font-size: 0.65rem; margin-bottom: 6px; }
+
+  .urna-number-display {
+    margin-bottom: 8px;
+    margin-top: 4px !important;
+  }
+
+  .urna-number-box {
+    width: 28px;
+    height: 36px;
+    font-size: 1.1rem;
+  }
+
+  .urna-candidate-photo {
+    width: 48px;
+    height: 62px;
+    font-size: 1.3rem;
+  }
+
+  .urna-candidate-name { font-size: 0.8rem; }
+
+  .urna-key {
+    height: 36px;
+    font-size: 1.15rem;
+  }
+
+  .urna-btn {
+    padding: 7px 2px;
+    font-size: 0.6rem;
+    letter-spacing: 0.02em;
+  }
+
+  .urna-btn-confirm {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .identification-header { padding: var(--space-4) var(--space-5); }
+
+  .identification-header-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+    margin-bottom: var(--space-2);
+  }
+
+  .identification-body {
+    padding: var(--space-4) var(--space-4);
+    gap: var(--space-3);
+  }
+
+  .admin-content { padding: var(--space-3); }
   .grid-4 { grid-template-columns: 1fr; }
 }
 
-@media (min-width: 769px) {
-  .admin-sidebar-mobile-toggle {
-    display: none;
+/* ══ Desktop Grande (>= 1025px): sidebar sempre visivel ════════════════════ */
+@media (min-width: 1025px) {
+  .admin-hamburger,
+  .admin-sidebar-close,
+  .admin-sidebar-overlay {
+    display: none !important;
+  }
+
+  .admin-sidebar {
+    transform: translateX(0) !important;
   }
 }

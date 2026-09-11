@@ -286,7 +286,7 @@ export const PositionsPage: React.FC = () => {
 
       {/* Tabela de Cargos */}
       <div className="admin-card">
-        <div className="admin-table-wrapper">
+        <div className="admin-table-wrapper admin-table-desktop">
           <table className="admin-table">
             <thead>
               <tr>
@@ -384,6 +384,91 @@ export const PositionsPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Celular */}
+        <div className="admin-cards-mobile">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+              Carregando cargos...
+            </div>
+          ) : positions.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+              Nenhum cargo cadastrado.
+            </div>
+          ) : (
+            positions.map((pos) => (
+              <div key={pos.id} className="admin-mobile-card">
+                <div className="admin-mobile-card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{ padding: '0.4rem', background: 'rgba(30, 41, 59, 0.8)', borderRadius: '6px' }}>
+                      <Award size={16} color="#60a5fa" />
+                    </div>
+                    <strong style={{ color: 'white', fontSize: '0.95rem' }}>{pos.name}</strong>
+                  </div>
+                  <div>{getScopeBadge(pos.scope, pos.isNational)}</div>
+                </div>
+
+                <div className="admin-mobile-card-grid">
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">DÍGITOS</span>
+                    <span className="admin-mobile-card-value">{pos.defaultDigitCount ?? 2} dígitos</span>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">VAGAS</span>
+                    <span className="admin-mobile-card-value">{pos.defaultSlots ?? 1} vaga(s)</span>
+                  </div>
+                  {pos.description && (
+                    <div className="admin-mobile-card-field" style={{ gridColumn: 'span 2' }}>
+                      <span className="admin-mobile-card-label">DESCRIÇÃO</span>
+                      <span className="admin-mobile-card-value" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                        {pos.description}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="admin-mobile-card-actions">
+                  <button
+                    onClick={() => handleStartEdit(pos)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      color: '#60a5fa',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button
+                    onClick={() => handleDeletePosition(pos.id, pos.name)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Trash2 size={14} /> Excluir
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

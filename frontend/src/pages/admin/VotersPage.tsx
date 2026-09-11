@@ -220,7 +220,7 @@ export const VotersPage: React.FC = () => {
 
       {/* Tabela de Votantes */}
       <div className="admin-card">
-        <div className="admin-table-wrapper">
+        <div className="admin-table-wrapper admin-table-desktop">
           <table className="admin-table">
             <thead>
               <tr>
@@ -316,6 +316,101 @@ export const VotersPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Celular */}
+        <div className="admin-cards-mobile">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+              Carregando eleitores...
+            </div>
+          ) : voters.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+              Nenhum eleitor encontrado para esta eleição.
+            </div>
+          ) : (
+            voters.map((v) => (
+              <div key={v.id} className="admin-mobile-card">
+                <div className="admin-mobile-card-header">
+                  <div>
+                    <strong style={{ color: 'white', fontSize: '0.95rem', display: 'block' }}>{v.discordName}</strong>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{v.rpgName}</span>
+                  </div>
+                  <div>
+                    <span
+                      style={{
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        background: v.status === 'VOTED' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                        color: v.status === 'VOTED' ? '#4ade80' : '#facc15',
+                      }}
+                    >
+                      {v.status === 'VOTED' ? 'VOTO CONCLUÍDO' : 'EM ANDAMENTO'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="admin-mobile-card-grid">
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">ESTADO (UF)</span>
+                    <span className="admin-mobile-card-value">
+                      <span
+                        style={{
+                          padding: '0.15rem 0.4rem',
+                          background: 'rgba(59, 130, 246, 0.15)',
+                          color: '#60a5fa',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {v.state?.abbreviation || '-'}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">INÍCIO</span>
+                    <span className="admin-mobile-card-value" style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                      {new Date(v.startedAt).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <div className="admin-mobile-card-field" style={{ gridColumn: 'span 2' }}>
+                    <span className="admin-mobile-card-label">CONCLUSÃO</span>
+                    <span className="admin-mobile-card-value" style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                      {v.completedAt ? new Date(v.completedAt).toLocaleString('pt-BR') : 'Em andamento'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="admin-mobile-card-actions">
+                  <button
+                    onClick={() => handleOpenReceipt(v.id)}
+                    disabled={v.status !== 'VOTED'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      background: v.status === 'VOTED' ? 'rgba(59, 130, 246, 0.2)' : '#334155',
+                      color: v.status === 'VOTED' ? '#60a5fa' : '#64748b',
+                      border: v.status === 'VOTED' ? '1px solid rgba(59, 130, 246, 0.4)' : 'none',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: v.status === 'VOTED' ? 'pointer' : 'not-allowed',
+                      width: '100%',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <FileText size={15} />
+                    {v.status === 'VOTED' ? 'Ver Votos & Comprovante' : 'Em votação'}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

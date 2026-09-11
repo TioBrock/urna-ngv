@@ -59,16 +59,8 @@ export const VotingPage: React.FC = () => {
           />
         </div>
 
-        {/* Dica de atalhos do teclado físico */}
-        <div
-          style={{
-            marginTop: '1rem',
-            textAlign: 'center',
-            color: 'rgba(255, 255, 255, 0.6)',
-            fontSize: '0.72rem',
-            lineHeight: '1.5',
-          }}
-        >
+        {/* Dica de atalhos do teclado físico — oculta no mobile para economizar espaço */}
+        <div className="urna-keyboard-hint">
           <span>💡 Você também pode usar seu <strong>teclado físico</strong>: </span>
           <span><strong>0-9</strong> números • </span>
           <span><strong>ENTER</strong> confirma • </span>

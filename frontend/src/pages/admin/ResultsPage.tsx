@@ -220,10 +220,10 @@ export const ResultsPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <MapPin size={18} color="#60a5fa" />
               <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'white' }}>
-                Totais de Votos por Estado
+                Eleitores Votantes por Estado
               </h3>
               <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 'auto' }}>
-                Participação de cada UF nesta eleição
+                Pessoas participantes de cada UF nesta eleição
               </span>
             </div>
 
@@ -267,7 +267,10 @@ export const ResultsPage: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#60a5fa' }}>
-                        {st.votes.toLocaleString('pt-BR')} <span style={{ fontSize: '0.7rem', fontWeight: 500, color: '#94a3b8' }}>votos</span>
+                        {(st.voters ?? st.votes).toLocaleString('pt-BR')}{' '}
+                        <span style={{ fontSize: '0.7rem', fontWeight: 500, color: '#94a3b8' }}>
+                          {(st.voters ?? st.votes) === 1 ? 'eleitor' : 'eleitores'}
+                        </span>
                       </span>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4ade80' }}>
                         {st.percentage}%
@@ -431,14 +434,7 @@ export const ResultsPage: React.FC = () => {
                         Nenhum voto nominal recebido para esta vaga ainda.
                       </div>
                     ) : (
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(280px, 340px) 1fr',
-                          gap: '1.5rem',
-                          alignItems: 'center',
-                        }}
-                      >
+                      <div className="results-grid-layout">
                         {/* ── GRÁFICO DE CÍRCULO (DONUT CHART) COM RECHARTS ── */}
                         <div
                           style={{

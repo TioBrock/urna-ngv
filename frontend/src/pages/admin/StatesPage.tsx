@@ -60,7 +60,7 @@ export const StatesPage: React.FC = () => {
       </div>
 
       <div className="admin-card">
-        <div className="admin-table-wrapper">
+        <div className="admin-table-wrapper admin-table-desktop">
           <table className="admin-table">
             <thead>
               <tr>
@@ -144,6 +144,85 @@ export const StatesPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Celular */}
+        <div className="admin-cards-mobile">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+              Carregando estados...
+            </div>
+          ) : states.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+              Nenhum estado cadastrado.
+            </div>
+          ) : (
+            states.map((st) => (
+              <div key={st.id} className="admin-mobile-card">
+                <div className="admin-mobile-card-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 800,
+                        fontSize: '1rem',
+                        color: '#60a5fa',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {st.abbreviation}
+                    </span>
+                    <strong style={{ color: 'white', fontSize: '0.95rem' }}>{st.name}</strong>
+                  </div>
+                  <div>
+                    <span
+                      style={{
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        background: st.isActive !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: st.isActive !== false ? '#4ade80' : '#f87171',
+                      }}
+                    >
+                      {st.isActive !== false ? 'ATIVO' : 'INATIVO'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="admin-mobile-card-grid">
+                  <div className="admin-mobile-card-field">
+                    <span className="admin-mobile-card-label">SESSÕES REGISTRADAS</span>
+                    <span className="admin-mobile-card-value">{st._count?.voterSessions ?? 0} eleitor(es)</span>
+                  </div>
+                </div>
+
+                <div className="admin-mobile-card-actions">
+                  <button
+                    type="button"
+                    disabled={togglingId === st.id}
+                    onClick={(e) => handleToggleActive(st.id, st.isActive !== false, e)}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      background: st.isActive !== false ? '#334155' : 'rgba(34, 197, 94, 0.2)',
+                      color: st.isActive !== false ? '#cbd5e1' : '#4ade80',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: togglingId === st.id ? 'wait' : 'pointer',
+                      opacity: togglingId === st.id ? 0.6 : 1,
+                      width: '100%',
+                    }}
+                  >
+                    {st.isActive !== false ? 'Desativar Estado' : 'Ativar Estado'}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -53,11 +53,11 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
   ]);
 
   const statesOverview = electionStates.map((es) => {
-    const stateVotes = votesByStateGroup.find((g) => g.stateId === es.stateId)?._count._all ?? 0;
+    // Quantidade de eleitores (pessoas) que votaram neste estado (não a soma de votos de cargos)
     const stateVoters = votersByStateGroup.find((g) => g.stateId === es.stateId)?._count._all ?? 0;
     return {
       state: es.state,
-      votes: stateVotes,
+      votes: stateVoters,
       voters: stateVoters,
       percentage: totalVotersOverall > 0 ? ((stateVoters / totalVotersOverall) * 100).toFixed(1) : '0.0',
     };

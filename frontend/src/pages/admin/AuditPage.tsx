@@ -176,7 +176,7 @@ export const AuditPage: React.FC = () => {
 
       {/* Tabela de Auditoria */}
       <div className="admin-card">
-        <div className="admin-table-wrapper">
+        <div className="admin-table-wrapper admin-table-desktop">
           <table className="admin-table">
             <thead>
               <tr>
@@ -273,6 +273,91 @@ export const AuditPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Visualização em Cards para Celular */}
+        <div className="admin-cards-mobile">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+              Carregando registros de auditoria...
+            </div>
+          ) : logs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+              Nenhum registro de auditoria encontrado.
+            </div>
+          ) : (
+            logs.map((log) => {
+              const isExpanded = expandedLogId === log.id;
+              return (
+                <div key={log.id} className="admin-mobile-card">
+                  <div className="admin-mobile-card-header">
+                    <div>{getEventBadge(log.eventType)}</div>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                      {new Date(log.createdAt).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong style={{ color: 'white', fontSize: '0.9rem', display: 'block' }}>
+                      {log.description}
+                    </strong>
+                  </div>
+
+                  <div className="admin-mobile-card-grid">
+                    <div className="admin-mobile-card-field">
+                      <span className="admin-mobile-card-label">ORIGEM / IP</span>
+                      <span className="admin-mobile-card-value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: '#94a3b8' }}>
+                        {log.ip || '-'}
+                      </span>
+                    </div>
+                    <div className="admin-mobile-card-field">
+                      <span className="admin-mobile-card-label">RESPONSÁVEL</span>
+                      <span className="admin-mobile-card-value">
+                        {log.adminUser ? log.adminUser.name || log.adminUser.email : 'Sistema'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {log.metadata && Object.keys(log.metadata).length > 0 && (
+                    <div className="admin-mobile-card-actions">
+                      <button
+                        onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                        style={{
+                          padding: '0.35rem 0.6rem',
+                          background: '#334155',
+                          color: '#60a5fa',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          width: '100%',
+                        }}
+                      >
+                        {isExpanded ? 'Ocultar Metadados' : 'Ver Metadados'}
+                      </button>
+                    </div>
+                  )}
+
+                  {isExpanded && log.metadata && (
+                    <pre
+                      style={{
+                        background: '#090d16',
+                        border: '1px solid #334155',
+                        borderRadius: '6px',
+                        padding: '0.65rem',
+                        color: '#a5b4fc',
+                        fontSize: '0.7rem',
+                        overflowX: 'auto',
+                        margin: 0,
+                      }}
+                    >
+                      {JSON.stringify(log.metadata, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
