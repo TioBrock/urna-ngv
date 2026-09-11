@@ -6,8 +6,8 @@ import toast from 'react-hot-toast';
 
 export const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@urna.ngv');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,6 +97,8 @@ export const AdminLogin: React.FC = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="seu-email@exemplo.com"
+                autoComplete="email"
                 required
                 disabled={loading}
                 style={{
@@ -123,6 +125,8 @@ export const AdminLogin: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
                 required
                 disabled={loading}
                 style={{
