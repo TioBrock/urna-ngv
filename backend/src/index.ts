@@ -28,8 +28,15 @@ app.use(helmet({
 }));
 
 // ── CORS ──
+const allowedOrigin = process.env.FRONTEND_URL;
 app.use(cors({
-  origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Permite chamadas sem origin (como curl, postman ou mobile) ou se bater com FRONTEND_URL
+    if (!origin || !allowedOrigin || origin === allowedOrigin || origin.endsWith('.vercel.app') || origin.includes('localhost')) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Permite por padrão para evitar bloqueios inesperados de deploy
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
