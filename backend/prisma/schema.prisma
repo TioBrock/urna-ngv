@@ -150,15 +150,16 @@ model ElectionState {
 
 // Cargo-base (ex: "Presidente", "Senador") — reutilizável entre eleições
 model Position {
-  id                String   @id @default(uuid())
-  name              String   @unique
-  description       String?
-  scope             String   @default("ESTADUAL") // NACIONAL, ESTADUAL, MUNICIPAL
-  defaultDigitCount Int      @default(2)
-  defaultSlots      Int      @default(1)
-  isNational        Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  description         String?
+  scope               String   @default("ESTADUAL") // NACIONAL, ESTADUAL, MUNICIPAL
+  defaultDigitCount   Int      @default(2)
+  defaultSlots        Int      @default(1)
+  defaultVotingSystem String   @default("MAJORITARIO") // MAJORITARIO, PROPORCIONAL
+  isNational          Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   electionPositions ElectionPosition[]
   candidates        Candidate[]
@@ -174,6 +175,7 @@ model ElectionPosition {
   order        Int      // Ordem na sequência de votação
   slots        Int      @default(1)  // Quantidade de vagas
   digitCount   Int      @default(2)  // Quantidade de dígitos do número
+  votingSystem String   @default("MAJORITARIO") // MAJORITARIO, PROPORCIONAL
   isNational   Boolean  @default(true)  // true = mesmo candidatos para todos os estados
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())

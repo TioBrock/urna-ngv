@@ -17,6 +17,7 @@ export const PositionsPage: React.FC = () => {
   const [formDigitCount, setFormDigitCount] = useState(2);
   const [formSlots, setFormSlots] = useState(1);
   const [formDescription, setFormDescription] = useState('');
+  const [formVotingSystem, setFormVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
 
   // Form State Edição
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
@@ -25,6 +26,7 @@ export const PositionsPage: React.FC = () => {
   const [editDigitCount, setEditDigitCount] = useState(2);
   const [editSlots, setEditSlots] = useState(1);
   const [editDescription, setEditDescription] = useState('');
+  const [editVotingSystem, setEditVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
 
   const fetchPositions = () => {
     setLoading(true);
@@ -54,6 +56,7 @@ export const PositionsPage: React.FC = () => {
         defaultDigitCount: Number(formDigitCount),
         defaultSlots: Number(formSlots),
         description: formDescription.trim() || undefined,
+        defaultVotingSystem: formVotingSystem,
       });
 
       toast.success('Cargo político cadastrado com sucesso!');
@@ -63,6 +66,7 @@ export const PositionsPage: React.FC = () => {
       setFormDigitCount(2);
       setFormSlots(1);
       setFormScope('ESTADUAL');
+      setFormVotingSystem('MAJORITARIO');
       fetchPositions();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao cadastrar cargo');
@@ -78,6 +82,7 @@ export const PositionsPage: React.FC = () => {
     setEditDigitCount(pos.defaultDigitCount ?? 2);
     setEditSlots(pos.defaultSlots ?? 1);
     setEditDescription(pos.description || '');
+    setEditVotingSystem((pos.defaultVotingSystem as any) || 'MAJORITARIO');
     setShowEditModal(true);
   };
 
@@ -97,6 +102,7 @@ export const PositionsPage: React.FC = () => {
         defaultDigitCount: Number(editDigitCount),
         defaultSlots: Number(editSlots),
         description: editDescription.trim() || undefined,
+        defaultVotingSystem: editVotingSystem,
       });
 
       toast.success('Cargo atualizado com sucesso!');
@@ -293,6 +299,7 @@ export const PositionsPage: React.FC = () => {
                 <th>Cargo Político</th>
                 <th>Dígitos Padrão</th>
                 <th>Vagas Padrão</th>
+                <th>Sistema</th>
                 <th>Âmbito</th>
                 <th>Descrição / Regras TSE</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -307,7 +314,7 @@ export const PositionsPage: React.FC = () => {
                 </tr>
               ) : positions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                     Nenhum cargo cadastrado.
                   </td>
                 </tr>
@@ -341,6 +348,24 @@ export const PositionsPage: React.FC = () => {
                     <td>
                       <span style={{ color: '#cbd5e1', fontWeight: 600 }}>
                         {pos.defaultSlots ?? 1} vaga(s)
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '0.2rem 0.55rem',
+                        borderRadius: '5px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        background: (pos.defaultVotingSystem || 'MAJORITARIO') === 'PROPORCIONAL'
+                          ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                        color: (pos.defaultVotingSystem || 'MAJORITARIO') === 'PROPORCIONAL'
+                          ? '#fbbf24' : '#94a3b8',
+                        border: `1px solid ${(pos.defaultVotingSystem || 'MAJORITARIO') === 'PROPORCIONAL' ? 'rgba(245,158,11,0.3)' : 'rgba(100,116,139,0.3)'}`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {(pos.defaultVotingSystem || 'MAJORITARIO') === 'PROPORCIONAL' ? '⊖ Proporcional' : '✓ Majoritário'}
                       </span>
                     </td>
                     <td>{getScopeBadge(pos.scope, pos.isNational)}</td>
@@ -603,6 +628,28 @@ export const PositionsPage: React.FC = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  SISTEMA DE VOTAÇÃO *
+                </label>
+                <select
+                  value={formVotingSystem}
+                  onChange={(e) => setFormVotingSystem(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="MAJORITARIO">Majoritário — Eleito(s) por maioria de votos</option>
+                  <option value="PROPORCIONAL">Proporcional — Quociente Eleitoral (D'Hondt)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
                   DESCRIÇÃO / NOTAS DAS REGRAS
                 </label>
                 <input
@@ -741,6 +788,27 @@ export const PositionsPage: React.FC = () => {
                   <option value="ESTADUAL">Estadual (Governador, Deputado Estadual...)</option>
                   <option value="NACIONAL">Nacional (Presidente, Senador, Dep. Federal...)</option>
                   <option value="MUNICIPAL">Municipal (Prefeito, Vereador...)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  SISTEMA DE VOTAÇÃO *
+                </label>
+                <select
+                  value={editVotingSystem}
+                  onChange={(e) => setEditVotingSystem(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                  }}
+                >
+                  <option value="MAJORITARIO">Majoritário — Eleito(s) por maioria de votos</option>
+                  <option value="PROPORCIONAL">Proporcional — Quociente Eleitoral (D'Hondt)</option>
                 </select>
               </div>
 

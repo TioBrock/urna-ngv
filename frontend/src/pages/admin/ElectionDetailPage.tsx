@@ -19,6 +19,7 @@ export const ElectionDetailPage: React.FC = () => {
   const [posSlots, setPosSlots] = useState(1);
   const [posDigits, setPosDigits] = useState(2);
   const [posIsNational, setPosIsNational] = useState(false);
+  const [posVotingSystem, setPosVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
   const [submitting, setSubmitting] = useState(false);
 
   // Form para editar cargo da eleição
@@ -27,6 +28,7 @@ export const ElectionDetailPage: React.FC = () => {
   const [editPosSlots, setEditPosSlots] = useState(1);
   const [editPosDigits, setEditPosDigits] = useState(2);
   const [editPosIsNational, setEditPosIsNational] = useState(false);
+  const [editPosVotingSystem, setEditPosVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
 
   const fetchDetails = () => {
     if (!id) return;
@@ -40,6 +42,7 @@ export const ElectionDetailPage: React.FC = () => {
           setPosDigits(bPos[0].defaultDigitCount || 2);
           setPosSlots(bPos[0].defaultSlots || 1);
           setPosIsNational(bPos[0].isNational);
+          setPosVotingSystem((bPos[0].defaultVotingSystem as any) || 'MAJORITARIO');
         }
         // Sugere próxima ordem
         const maxOrder = elec.electionPositions?.reduce((max, p) => Math.max(max, p.order), 0) ?? 0;
@@ -60,6 +63,7 @@ export const ElectionDetailPage: React.FC = () => {
       setPosDigits(pos.defaultDigitCount);
       setPosSlots(pos.defaultSlots);
       setPosIsNational(pos.isNational);
+      setPosVotingSystem((pos.defaultVotingSystem as any) || 'MAJORITARIO');
     }
   };
 
@@ -75,6 +79,7 @@ export const ElectionDetailPage: React.FC = () => {
         slots: Number(posSlots),
         digitCount: Number(posDigits),
         isNational: posIsNational,
+        votingSystem: posVotingSystem,
       });
 
       toast.success('Cargo adicionado à cédula eleitoral!');
@@ -93,6 +98,7 @@ export const ElectionDetailPage: React.FC = () => {
     setEditPosSlots(ep.slots);
     setEditPosDigits(ep.digitCount);
     setEditPosIsNational(ep.isNational);
+    setEditPosVotingSystem((ep.votingSystem as any) || 'MAJORITARIO');
     setShowEditPosModal(true);
   };
 
@@ -107,6 +113,7 @@ export const ElectionDetailPage: React.FC = () => {
         slots: Number(editPosSlots),
         digitCount: Number(editPosDigits),
         isNational: editPosIsNational,
+        votingSystem: editPosVotingSystem,
       });
 
       toast.success('Cargo atualizado com sucesso!');
@@ -282,6 +289,7 @@ export const ElectionDetailPage: React.FC = () => {
                 <th>Dígitos</th>
                 <th>Vagas</th>
                 <th>Âmbito</th>
+                <th>Sistema</th>
                 <th>Votos Gravados</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
@@ -289,7 +297,7 @@ export const ElectionDetailPage: React.FC = () => {
             <tbody>
               {!election.electionPositions || election.electionPositions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
                     Nenhum cargo configurado. Adicione cargos para que a urna funcione.
                   </td>
                 </tr>
@@ -316,6 +324,21 @@ export const ElectionDetailPage: React.FC = () => {
                         }}
                       >
                         {ep.isNational ? 'NACIONAL' : 'ESTADUAL'}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          background: ep.votingSystem === 'PROPORCIONAL' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.2)',
+                          color: ep.votingSystem === 'PROPORCIONAL' ? '#f59e0b' : '#94a3b8',
+                          border: `1px solid ${ep.votingSystem === 'PROPORCIONAL' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(100, 116, 139, 0.3)'}`,
+                        }}
+                      >
+                        {ep.votingSystem === 'PROPORCIONAL' ? 'Proporcional' : 'Majoritário'}
                       </span>
                     </td>
                     <td>{ep._count?.votes ?? 0}</td>
@@ -505,6 +528,33 @@ export const ElectionDetailPage: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  SISTEMA DE VOTAÇÃO
+                </label>
+                <select
+                  value={posVotingSystem}
+                  onChange={(e) => setPosVotingSystem(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="MAJORITARIO">Majoritário (mais votados vencem)</option>
+                  <option value="PROPORCIONAL">Proporcional (quociente eleitoral / partidário)</option>
+                </select>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  {posVotingSystem === 'PROPORCIONAL' 
+                    ? 'Eleitos segundo votos do partido/legenda e quocientes eleitoral e partidário.'
+                    : 'Eleitos os candidatos mais votados nominalmente.'}
+                </span>
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button
                   type="button"
@@ -662,6 +712,33 @@ export const ElectionDetailPage: React.FC = () => {
                 <label htmlFor="editPosIsNational" style={{ fontSize: '0.85rem', color: '#cbd5e1', cursor: 'pointer' }}>
                   Cargo de Âmbito Nacional (candidatos concorrem em todos os estados)
                 </label>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                  SISTEMA DE VOTAÇÃO
+                </label>
+                <select
+                  value={editPosVotingSystem}
+                  onChange={(e) => setEditPosVotingSystem(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="MAJORITARIO">Majoritário (mais votados vencem)</option>
+                  <option value="PROPORCIONAL">Proporcional (quociente eleitoral / partidário)</option>
+                </select>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  {editPosVotingSystem === 'PROPORCIONAL' 
+                    ? 'Eleitos segundo votos do partido/legenda e quocientes eleitoral e partidário.'
+                    : 'Eleitos os candidatos mais votados nominalmente.'}
+                </span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>

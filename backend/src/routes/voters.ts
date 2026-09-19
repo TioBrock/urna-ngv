@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, AuthRequest } from '../middleware/auth';
+import { auditService } from '../services/auditService';
 
 export const votersRouter = Router();
 
@@ -150,6 +151,49 @@ votersRouter.get('/receipt/:sessionId', requireAuth, async (req: Request, res: R
         : null,
       registeredAt: v.registeredAt,
     })),
+  });
+});
+
+// DELETE /api/voters/:sessionId — Excluir sessão e anular votos de um eleitor específico
+votersRouter.delete('/:sessionId', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { sessionId } = req.params;
+
+  const session = await prisma.voterSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      election: { select: { id: true, name: true } },
+      votes: { select: { id: true } },
+    },
+  });
+
+  if (!session) {
+    res.status(404).json({ error: 'Sessão de eleitor não encontrada' });
+    return;
+  }
+
+  const votesCount = session.votes.length;
+
+  await prisma.$transaction([
+    prisma.vote.deleteMany({ where: { voterSessionId: sessionId } }),
+    prisma.voterSession.delete({ where: { id: sessionId } }),
+  ]);
+
+  await auditService.log({
+    eventType: 'CONFIG_CHANGED',
+    description: `Votos do eleitor "${session.discordName}" (${session.rpgName}) foram excluídos da eleição "${session.election.name}" (${votesCount} votos removidos)`,
+    electionId: session.electionId,
+    adminUserId: req.adminUser!.id,
+    metadata: {
+      sessionId: session.id,
+      discordName: session.discordName,
+      rpgName: session.rpgName,
+      votesDeleted: votesCount,
+    },
+  });
+
+  res.json({
+    message: `Votos do eleitor "${session.discordName}" foram excluídos com sucesso.`,
+    deletedVotesCount: votesCount,
   });
 });
 

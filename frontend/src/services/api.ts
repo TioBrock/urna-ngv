@@ -27,6 +27,18 @@ export const api = axios.create({
   },
 });
 
+export const getPhotoUrl = (path?: string | null): string => {
+  if (!path || typeof path !== 'string') return '';
+  const trimmed = path.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  const rawApiUrl = import.meta.env.VITE_API_URL || '';
+  const backendBase = rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+  return `${backendBase}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+};
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token && config.headers) {
@@ -147,6 +159,7 @@ export const positionsApi = {
     scope: 'NACIONAL' | 'ESTADUAL' | 'MUNICIPAL';
     defaultDigitCount: number;
     defaultSlots: number;
+    defaultVotingSystem?: 'MAJORITARIO' | 'PROPORCIONAL';
   }): Promise<Position> => {
     const res = await api.post('/positions', data);
     return res.data;
@@ -170,6 +183,7 @@ export const positionsApi = {
       slots: number;
       digitCount: number;
       isNational: boolean;
+      votingSystem?: string;
     }
   ): Promise<ElectionPosition> => {
     const res = await api.post(`/positions/election/${electionId}`, data);
@@ -189,6 +203,7 @@ export const positionsApi = {
       digitCount: number;
       isNational: boolean;
       isActive: boolean;
+      votingSystem: string;
     }>
   ): Promise<ElectionPosition> => {
     const res = await api.put(`/positions/${id}`, data);
@@ -265,6 +280,10 @@ export const votersApi = {
     const res = await api.get(`/voters/receipt/${sessionId}`);
     return res.data;
   },
+  deleteSession: async (sessionId: string): Promise<{ message: string; deletedVotesCount: number }> => {
+    const res = await api.delete(`/voters/${sessionId}`);
+    return res.data;
+  },
 };
 
 // ── RESULTS (ADMIN) ──
@@ -284,6 +303,10 @@ export const resultsApi = {
     electionId: string
   ): Promise<{ totalVoters: number; inProgress: number; totalVotes: number }> => {
     const res = await api.get(`/results/${electionId}/summary`);
+    return res.data;
+  },
+  getCsv: async (electionId: string): Promise<Blob> => {
+    const res = await api.get(`/results/${electionId}/csv`, { responseType: 'blob' });
     return res.data;
   },
 };

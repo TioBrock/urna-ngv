@@ -90,14 +90,24 @@ export const ElectionsPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Tem certeza que deseja remover a eleição "${name}"? Esta ação é irreversível.`)) {
+  const handleDelete = async (id: string, name: string, status: string) => {
+    if (status === 'OPEN' || status === 'PAUSED') {
+      toast.error('Não é possível excluir uma eleição em andamento ou pausada. Encerre-a primeiro.');
+      return;
+    }
+
+    const confirmMsg =
+      status === 'CLOSED'
+        ? `ATENÇÃO: A eleição "${name}" está ENCERRADA. Ao excluí-la, todos os votos, eleitores e candidatos cadastrados nesta eleição serão PERMANENTEMENTE excluídos. Deseja realmente prosseguir?`
+        : `Tem certeza que deseja remover o rascunho da eleição "${name}"? Esta ação é irreversível.`;
+
+    if (!window.confirm(confirmMsg)) {
       return;
     }
 
     try {
       await electionsApi.delete(id);
-      toast.success('Eleição removida');
+      toast.success('Eleição e dados relacionados excluídos com sucesso');
       fetchElections();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao remover eleição');
@@ -295,7 +305,7 @@ export const ElectionsPage: React.FC = () => {
 
                         <button
                           title="Remover"
-                          onClick={() => handleDelete(elec.id, elec.name)}
+                          onClick={() => handleDelete(elec.id, elec.name, elec.status)}
                           style={{
                             padding: '0.35rem 0.6rem',
                             background: 'rgba(239, 68, 68, 0.1)',
@@ -467,7 +477,7 @@ export const ElectionsPage: React.FC = () => {
 
                   <button
                     title="Remover"
-                    onClick={() => handleDelete(elec.id, elec.name)}
+                    onClick={() => handleDelete(elec.id, elec.name, elec.status)}
                     style={{
                       padding: '0.35rem 0.6rem',
                       background: 'rgba(239, 68, 68, 0.1)',

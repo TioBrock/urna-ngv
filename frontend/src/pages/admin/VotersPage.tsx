@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { votersApi, electionsApi } from '../../services/api';
+import { votersApi, electionsApi, getPhotoUrl } from '../../services/api';
 import { VoterSession, Election, VoterReceipt } from '../../types';
-import { Search, RefreshCw, FileText, CheckCircle, Printer, X, Copy, Check } from 'lucide-react';
+import { Search, RefreshCw, FileText, CheckCircle, Printer, X, Copy, Check, Trash2, Download, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const VotersPage: React.FC = () => {
@@ -19,6 +19,10 @@ export const VotersPage: React.FC = () => {
   const [receiptData, setReceiptData] = useState<VoterReceipt | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [copiedProtocol, setCopiedProtocol] = useState(false);
+
+  // Estado de Exclusão de Voto (Auditoria/Fraude)
+  const [deletingVoter, setDeletingVoter] = useState<VoterSession | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     electionsApi
@@ -84,6 +88,75 @@ export const VotersPage: React.FC = () => {
     setTimeout(() => setCopiedProtocol(false), 2500);
   };
 
+  const handleDeleteVoter = async () => {
+    if (!deletingVoter) return;
+    setIsDeleting(true);
+    try {
+      const res = await votersApi.deleteSession(deletingVoter.id);
+      toast.success(res.message || 'Voto e registro do eleitor excluídos com sucesso');
+      setDeletingVoter(null);
+      if (showReceiptModal && receiptData?.session.id === deletingVoter.id) {
+        setShowReceiptModal(false);
+        setReceiptData(null);
+      }
+      fetchVoters();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao excluir voto do eleitor');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleExportVotersCsv = () => {
+    if (voters.length === 0) {
+      toast.error('Nenhum eleitor na lista para exportar');
+      return;
+    }
+    const currentElec = elections.find((e) => e.id === selectedElectionId);
+    const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+    const lines: string[] = [];
+    lines.push(`${escapeCsv('RELAÇÃO DE COMPARECIMENTO ELEITORAL')};;;;;;`);
+    lines.push(`${escapeCsv('Eleição')};${escapeCsv(currentElec?.name || '')};;;;;`);
+    lines.push(`${escapeCsv('Data')};${escapeCsv(new Date().toLocaleString('pt-BR'))};;;;;`);
+    lines.push(`${escapeCsv('Total de Registros')};${escapeCsv(voters.length)};;;;;`);
+    lines.push(';;;;;;');
+    lines.push(
+      [
+        escapeCsv('Discord / Usuário'),
+        escapeCsv('Nome RPG / Personagem'),
+        escapeCsv('Estado (UF)'),
+        escapeCsv('Status'),
+        escapeCsv('Início da Votação'),
+        escapeCsv('Conclusão do Voto'),
+      ].join(';')
+    );
+
+    for (const v of voters) {
+      lines.push(
+        [
+          escapeCsv(v.discordName),
+          escapeCsv(v.rpgName),
+          escapeCsv(v.state?.abbreviation || '-'),
+          escapeCsv(v.status === 'VOTED' ? 'VOTO CONCLUÍDO' : 'EM ANDAMENTO'),
+          escapeCsv(new Date(v.startedAt).toLocaleString('pt-BR')),
+          escapeCsv(v.completedAt ? new Date(v.completedAt).toLocaleString('pt-BR') : '-'),
+        ].join(';')
+      );
+    }
+
+    const csvContent = '\uFEFF' + lines.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeElecName = (currentElec?.name || 'comparecimento').toLowerCase().replace(/[^a-z0-9]/gi, '_');
+    a.download = `eleitores_${safeElecName}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Lista de eleitores exportada com sucesso!');
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -94,24 +167,45 @@ export const VotersPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={fetchVoters}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.5rem 1rem',
-            background: '#334155',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-          }}
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          Atualizar Lista
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={fetchVoters}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              background: '#334155',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Atualizar Lista
+          </button>
+
+          <button
+            onClick={handleExportVotersCsv}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              background: '#1e293b',
+              color: 'white',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+            }}
+          >
+            <Download size={16} />
+            Exportar CSV
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -287,7 +381,7 @@ export const VotersPage: React.FC = () => {
                     <td style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
                       {v.completedAt ? new Date(v.completedAt).toLocaleString('pt-BR') : '-'}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <button
                         onClick={() => handleOpenReceipt(v.id)}
                         disabled={v.status !== 'VOTED'}
@@ -308,7 +402,30 @@ export const VotersPage: React.FC = () => {
                         title={v.status === 'VOTED' ? 'Visualizar votos e comprovante' : 'Votação ainda em andamento'}
                       >
                         <FileText size={14} />
-                        {v.status === 'VOTED' ? 'Ver Votos & Comprovante' : 'Em votação'}
+                        {v.status === 'VOTED' ? 'Ver Votos' : 'Em votação'}
+                      </button>
+
+                      <button
+                        onClick={() => setDeletingVoter(v)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.35rem 0.65rem',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          marginLeft: '0.4rem',
+                        }}
+                        title="Excluir votos deste eleitor da eleição"
+                      >
+                        <Trash2 size={13} />
+                        Excluir Voto
                       </button>
                     </td>
                   </tr>
@@ -384,7 +501,7 @@ export const VotersPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="admin-mobile-card-actions">
+                <div className="admin-mobile-card-actions" style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
                     onClick={() => handleOpenReceipt(v.id)}
                     disabled={v.status !== 'VOTED'}
@@ -400,12 +517,33 @@ export const VotersPage: React.FC = () => {
                       fontSize: '0.8rem',
                       fontWeight: 600,
                       cursor: v.status === 'VOTED' ? 'pointer' : 'not-allowed',
-                      width: '100%',
+                      flex: 1,
                       justifyContent: 'center',
                     }}
                   >
                     <FileText size={15} />
-                    {v.status === 'VOTED' ? 'Ver Votos & Comprovante' : 'Em votação'}
+                    {v.status === 'VOTED' ? 'Ver Votos' : 'Em votação'}
+                  </button>
+
+                  <button
+                    onClick={() => setDeletingVoter(v)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                    title="Excluir votos deste eleitor"
+                  >
+                    <Trash2 size={15} />
                   </button>
                 </div>
               </div>
@@ -598,9 +736,12 @@ export const VotersPage: React.FC = () => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', textAlign: 'right' }}>
                               {v.candidate.photoUrl && (
                                 <img
-                                  src={v.candidate.photoUrl}
+                                  src={getPhotoUrl(v.candidate.photoUrl)}
                                   alt={v.candidate.electoralName}
                                   style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
                                 />
                               )}
                               <div>
@@ -646,42 +787,200 @@ export const VotersPage: React.FC = () => {
                 </div>
 
                 {/* Footer Modal */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      const sessionVoter = voters.find((v) => v.id === receiptData.session.id) || ({
+                        id: receiptData.session.id,
+                        discordName: receiptData.session.discordName,
+                        rpgName: receiptData.session.rpgName,
+                      } as VoterSession);
+                      setDeletingVoter(sessionVoter);
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.4rem',
-                      padding: '0.5rem 1rem',
-                      background: '#334155',
-                      color: 'white',
-                      border: 'none',
+                      padding: '0.5rem 0.85rem',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
                       borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Printer size={15} /> Imprimir Comprovante
-                  </button>
-                  <button
-                    onClick={() => setShowReceiptModal(false)}
-                    style={{
-                      padding: '0.5rem 1.25rem',
-                      background: '#2563eb',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
+                      fontSize: '0.8rem',
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
                   >
-                    Fechar
+                    <Trash2 size={14} /> Excluir este Voto
                   </button>
+
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                      onClick={() => window.print()}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        padding: '0.5rem 1rem',
+                        background: '#334155',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Printer size={15} /> Imprimir Comprovante
+                    </button>
+                    <button
+                      onClick={() => setShowReceiptModal(false)}
+                      style={{
+                        padding: '0.5rem 1.25rem',
+                        background: '#2563eb',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Fechar
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* ── MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE VOTO ── */}
+      {deletingVoter && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem',
+          }}
+        >
+          <div
+            className="admin-card"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              padding: '1.5rem',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: '#0f172a',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ef4444',
+                }}
+              >
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Excluir e Desconsiderar Voto
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '2px 0 0 0' }}>
+                  Ação administrativa de auditoria eleitoral
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.5', marginBottom: '1rem' }}>
+              Você está prestes a excluir todos os votos registrados para este eleitor:
+            </p>
+
+            <div
+              style={{
+                background: '#1e293b',
+                padding: '0.85rem',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                fontSize: '0.85rem',
+              }}
+            >
+              <div>
+                <span style={{ color: '#94a3b8' }}>Discord: </span>
+                <strong style={{ color: 'white' }}>{deletingVoter.discordName}</strong>
+              </div>
+              <div style={{ marginTop: '4px' }}>
+                <span style={{ color: '#94a3b8' }}>Personagem / RPG: </span>
+                <strong style={{ color: '#60a5fa' }}>{deletingVoter.rpgName}</strong>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '0.75rem',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                color: '#fca5a5',
+                marginBottom: '1.25rem',
+              }}
+            >
+              ⚠️ <strong>Atenção:</strong> Os votos deste eleitor serão permanentemente excluídos e a apuração da eleição será recalculada imediatamente.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setDeletingVoter(null)}
+                disabled={isDeleting}
+                style={{
+                  padding: '0.55rem 1.2rem',
+                  background: '#334155',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteVoter}
+                disabled={isDeleting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.55rem 1.25rem',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  opacity: isDeleting ? 0.7 : 1,
+                }}
+              >
+                <Trash2 size={15} />
+                {isDeleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Candidate } from '../../types';
+import { getPhotoUrl } from '../../services/api';
 
 interface BallotDisplayProps {
   electionName?: string;
@@ -26,6 +27,12 @@ export const BallotDisplay: React.FC<BallotDisplayProps> = ({
   candidate,
   isSearching,
 }) => {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [candidate?.id, candidate?.photoUrl]);
+
   // Gera os boxes de dígitos
   const boxes = Array.from({ length: digitCount }, (_, i) => {
     const digit = digits[i];
@@ -93,8 +100,12 @@ export const BallotDisplay: React.FC<BallotDisplayProps> = ({
           {candidate && (
             <div className="urna-candidate animate-fade-in" style={{ marginTop: '0.5rem' }}>
               <div className="urna-candidate-photo">
-                {candidate.photoUrl ? (
-                  <img src={candidate.photoUrl} alt={candidate.electoralName} />
+                {candidate.photoUrl && !imgError ? (
+                  <img
+                    src={getPhotoUrl(candidate.photoUrl)}
+                    alt={candidate.electoralName}
+                    onError={() => setImgError(true)}
+                  />
                 ) : (
                   <span aria-hidden="true">👤</span>
                 )}

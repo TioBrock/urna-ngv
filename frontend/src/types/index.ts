@@ -12,6 +12,7 @@ export interface Position {
   scope: 'NACIONAL' | 'ESTADUAL' | 'MUNICIPAL' | string;
   defaultSlots: number;
   defaultDigitCount: number;
+  defaultVotingSystem?: 'MAJORITARIO' | 'PROPORCIONAL' | string;
   isNational: boolean;
 }
 
@@ -22,6 +23,7 @@ export interface ElectionPosition {
   order: number;
   slots: number;
   digitCount: number;
+  votingSystem?: 'MAJORITARIO' | 'PROPORCIONAL' | string;
   isNational: boolean;
   isActive: boolean;
   position: Position;
@@ -130,6 +132,8 @@ export interface CandidateResult {
   votes: number;
   percentage: string; // % sobre votos válidos
   percentageTotal?: string; // % sobre comparecimento total
+  isElected?: boolean;
+  electedReason?: string;
 }
 
 export interface SlotResult {
@@ -161,13 +165,35 @@ export interface ResultsOverview {
   byState: StateVoteOverview[];
 }
 
+export interface PartyResult {
+  party: string;
+  votes: number;
+  percentage: string;
+  directSeats: number;
+  leftoverSeats: number;
+  totalSeats: number;
+}
+
 export interface ElectionResult {
   electionPosition: {
     id: string;
     name: string;
     order: number;
     slots: number;
+    votingSystem?: string;
+    isNational?: boolean;
   };
+  votingSystem?: string;
+  electoralQuotient?: number | null;
+  partyResults?: PartyResult[];
+  totalVotes: number;
+  validVotes: number;
+  blank: number;
+  null: number;
+  blankPercentage: string;
+  nullPercentage: string;
+  validPercentage: string;
+  candidates: CandidateResult[];
   slots: SlotResult[];
 }
 

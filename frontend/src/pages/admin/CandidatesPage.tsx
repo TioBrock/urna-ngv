@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { candidatesApi, electionsApi, positionsApi, statesApi } from '../../services/api';
+import { candidatesApi, electionsApi, positionsApi, statesApi, getPhotoUrl } from '../../services/api';
 import { Candidate, Election, Position, State } from '../../types';
 import { Plus, Trash2, Search, User, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -34,6 +34,8 @@ export const CandidatesPage: React.FC = () => {
   const [formViceName, setFormViceName] = useState('');
   const [formIsNational, setFormIsNational] = useState(false);
   const [formPhoto, setFormPhoto] = useState<File | null>(null);
+  const [formPhotoUrl, setFormPhotoUrl] = useState('');
+  const [formPhotoType, setFormPhotoType] = useState<'url' | 'file'>('url');
   const [submitting, setSubmitting] = useState(false);
 
   // Formulário Edição de Candidato
@@ -47,6 +49,9 @@ export const CandidatesPage: React.FC = () => {
   const [editViceName, setEditViceName] = useState('');
   const [editIsNational, setEditIsNational] = useState(false);
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
+  const [editPhotoUrl, setEditPhotoUrl] = useState('');
+  const [editPhotoType, setEditPhotoType] = useState<'url' | 'file'>('url');
+  const [editRemovePhoto, setEditRemovePhoto] = useState(false);
   const [editIsActive, setEditIsActive] = useState(true);
 
   // Carrega opções iniciais
@@ -130,8 +135,10 @@ export const CandidatesPage: React.FC = () => {
     if (formViceName) {
       formData.append('viceCandidateName', formViceName);
     }
-    if (formPhoto) {
+    if (formPhotoType === 'file' && formPhoto) {
       formData.append('photo', formPhoto);
+    } else if (formPhotoType === 'url' && formPhotoUrl.trim()) {
+      formData.append('photoUrl', formPhotoUrl.trim());
     }
 
     setSubmitting(true);
@@ -146,6 +153,7 @@ export const CandidatesPage: React.FC = () => {
       setFormParty('');
       setFormViceName('');
       setFormPhoto(null);
+      setFormPhotoUrl('');
       fetchCandidates();
       fetchParties();
     } catch (err: any) {
@@ -167,6 +175,9 @@ export const CandidatesPage: React.FC = () => {
     setEditIsNational(candidate.isNational ?? false);
     setEditIsActive(candidate.isActive ?? true);
     setEditPhoto(null);
+    setEditPhotoUrl(candidate.photoUrl?.startsWith('http') ? candidate.photoUrl : '');
+    setEditPhotoType(candidate.photoUrl?.startsWith('http') ? 'url' : 'file');
+    setEditRemovePhoto(false);
     setShowEditModal(true);
   };
 
@@ -206,8 +217,12 @@ export const CandidatesPage: React.FC = () => {
     } else {
       formData.append('viceCandidateName', '');
     }
-    if (editPhoto) {
+    if (editRemovePhoto) {
+      formData.append('photoUrl', 'CLEAR');
+    } else if (editPhotoType === 'file' && editPhoto) {
       formData.append('photo', editPhoto);
+    } else if (editPhotoType === 'url' && editPhotoUrl.trim()) {
+      formData.append('photoUrl', editPhotoUrl.trim());
     }
 
     setSubmitting(true);
@@ -443,7 +458,14 @@ export const CandidatesPage: React.FC = () => {
                         }}
                       >
                         {c.photoUrl ? (
-                          <img src={c.photoUrl} alt={c.electoralName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img
+                            src={getPhotoUrl(c.photoUrl)}
+                            alt={c.electoralName}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
                         ) : (
                           <User size={20} color="#64748b" />
                         )}
@@ -604,7 +626,14 @@ export const CandidatesPage: React.FC = () => {
                       }}
                     >
                       {c.photoUrl ? (
-                        <img src={c.photoUrl} alt={c.electoralName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img
+                          src={getPhotoUrl(c.photoUrl)}
+                          alt={c.electoralName}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
                       ) : (
                         <User size={20} color="#64748b" />
                       )}
@@ -923,23 +952,95 @@ export const CandidatesPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
-                    FOTO DO CANDIDATO
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setFormPhoto(e.target.files?.[0] || null)}
-                    style={{
-                      width: '100%',
-                      padding: '0.6rem',
-                      background: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      color: 'white',
-                      fontSize: '0.8rem',
-                    }}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
+                      FOTO DO CANDIDATO
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.25rem', background: '#1e293b', padding: '2px', borderRadius: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setFormPhotoType('url')}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '0.7rem',
+                          borderRadius: '3px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: formPhotoType === 'url' ? '#3b82f6' : 'transparent',
+                          color: 'white',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Link/URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormPhotoType('file')}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '0.7rem',
+                          borderRadius: '3px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: formPhotoType === 'file' ? '#3b82f6' : 'transparent',
+                          color: 'white',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Arquivo
+                      </button>
+                    </div>
+                  </div>
+
+                  {formPhotoType === 'url' ? (
+                    <input
+                      type="url"
+                      placeholder="https://exemplo.com/foto.jpg ou link Discord"
+                      value={formPhotoUrl}
+                      onChange={(e) => setFormPhotoUrl(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.6rem',
+                        background: '#0f172a',
+                        border: '1px solid #334155',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '0.8rem',
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setFormPhoto(e.target.files?.[0] || null)}
+                      style={{
+                        width: '100%',
+                        padding: '0.6rem',
+                        background: '#0f172a',
+                        border: '1px solid #334155',
+                        borderRadius: '8px',
+                        color: 'white',
+                        fontSize: '0.8rem',
+                      }}
+                    />
+                  )}
+
+                  {formPhotoType === 'url' && formPhotoUrl && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+                      <img
+                        src={formPhotoUrl}
+                        alt="Preview"
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #475569' }}
+                        onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                      />
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Pré-visualização da imagem</span>
+                    </div>
+                  )}
+                  {formPhotoType === 'file' && formPhoto && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#4ade80' }}>Arquivo selecionado: {formPhoto.name}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1191,23 +1292,118 @@ export const CandidatesPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
-                    NOVA FOTO (DEIXE VAZIO PARA MANTER ATUAL)
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setEditPhoto(e.target.files?.[0] || null)}
-                    style={{
-                      width: '100%',
-                      padding: '0.6rem',
-                      background: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      color: 'white',
-                      fontSize: '0.8rem',
-                    }}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
+                      FOTO DO CANDIDATO
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.25rem', background: '#1e293b', padding: '2px', borderRadius: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => { setEditPhotoType('url'); setEditRemovePhoto(false); }}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '0.7rem',
+                          borderRadius: '3px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: editPhotoType === 'url' && !editRemovePhoto ? '#3b82f6' : 'transparent',
+                          color: 'white',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Link/URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditPhotoType('file'); setEditRemovePhoto(false); }}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '0.7rem',
+                          borderRadius: '3px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: editPhotoType === 'file' && !editRemovePhoto ? '#3b82f6' : 'transparent',
+                          color: 'white',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Arquivo
+                      </button>
+                    </div>
+                  </div>
+
+                  {!editRemovePhoto ? (
+                    editPhotoType === 'url' ? (
+                      <input
+                        type="url"
+                        placeholder="https://exemplo.com/foto.jpg ou link Discord"
+                        value={editPhotoUrl}
+                        onChange={(e) => setEditPhotoUrl(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '0.6rem',
+                          background: '#0f172a',
+                          border: '1px solid #334155',
+                          borderRadius: '8px',
+                          color: 'white',
+                          fontSize: '0.8rem',
+                        }}
+                      />
+                    ) : (
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setEditPhoto(e.target.files?.[0] || null)}
+                        style={{
+                          width: '100%',
+                          padding: '0.6rem',
+                          background: '#0f172a',
+                          border: '1px solid #334155',
+                          borderRadius: '8px',
+                          color: 'white',
+                          fontSize: '0.8rem',
+                        }}
+                      />
+                    )
+                  ) : (
+                    <div style={{ padding: '0.5rem', background: 'rgba(239, 68, 68, 0.15)', borderRadius: '6px', fontSize: '0.75rem', color: '#f87171' }}>
+                      Foto será removida ao salvar
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {editingCandidate?.photoUrl && !editRemovePhoto && (
+                        <img
+                          src={editPhotoType === 'url' && editPhotoUrl ? editPhotoUrl : getPhotoUrl(editingCandidate.photoUrl)}
+                          alt="Foto"
+                          style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #475569' }}
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      )}
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                        {editRemovePhoto ? 'Sem foto' : editingCandidate?.photoUrl ? 'Foto atual' : 'Sem foto'}
+                      </span>
+                    </div>
+
+                    {editingCandidate?.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditRemovePhoto(!editRemovePhoto)}
+                        style={{
+                          padding: '2px 8px',
+                          fontSize: '0.7rem',
+                          background: editRemovePhoto ? '#334155' : 'rgba(239, 68, 68, 0.15)',
+                          color: editRemovePhoto ? 'white' : '#ef4444',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {editRemovePhoto ? 'Desfazer' : 'Remover foto'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

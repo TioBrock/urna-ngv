@@ -1,5 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import path from 'path';
+import fs from 'fs/promises';
 import { ElectionStatus } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -265,20 +267,50 @@ electionsRouter.patch('/:id/validate-ip', requireAuth, async (req: AuthRequest, 
   res.json(updated);
 });
 
-// DELETE /api/elections/:id (apenas DRAFT)
+// DELETE /api/elections/:id (DRAFT ou CLOSED)
 electionsRouter.delete('/:id', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const existing = await prisma.election.findUnique({ where: { id: req.params.id } });
   if (!existing) {
     res.status(404).json({ error: 'Eleição não encontrada' });
     return;
   }
-  if (existing.status !== 'DRAFT') {
-    throw new AppError('Apenas eleições em rascunho podem ser excluídas', 409);
+  if (existing.status === 'OPEN' || existing.status === 'PAUSED') {
+    throw new AppError('Não é possível excluir uma eleição em andamento ou pausada. Encerre-a antes de excluir.', 409);
   }
 
+  // Deletar fotos físicas de candidatos locais vinculados à eleição
+  const candidatesWithPhotos = await prisma.candidate.findMany({
+    where: { electionId: req.params.id, photoUrl: { not: null } },
+    select: { photoUrl: true },
+  });
+  for (const c of candidatesWithPhotos) {
+    if (c.photoUrl && c.photoUrl.startsWith('/uploads/')) {
+      const oldPath = path.join(process.cwd(), c.photoUrl);
+      await fs.unlink(oldPath).catch(() => {});
+    }
+  }
+
+  // Limpeza em cascata transacional para manter integridade do banco
   await prisma.$transaction([
+    prisma.vote.deleteMany({ where: { electionId: req.params.id } }),
+    prisma.voterSession.deleteMany({ where: { electionId: req.params.id } }),
+    prisma.candidate.deleteMany({ where: { electionId: req.params.id } }),
+    prisma.electionPosition.deleteMany({ where: { electionId: req.params.id } }),
+    prisma.electionState.deleteMany({ where: { electionId: req.params.id } }),
     prisma.auditLog.updateMany({ where: { electionId: req.params.id }, data: { electionId: null } }),
     prisma.election.delete({ where: { id: req.params.id } }),
   ]);
-  res.json({ message: 'Eleição excluída com sucesso' });
+
+  await auditService.log({
+    eventType: 'CONFIG_CHANGED',
+    description: `Eleição "${existing.name}" (${existing.year}) e todos os seus dados foram excluídos`,
+    adminUserId: req.adminUser!.id,
+    metadata: {
+      deletedElectionId: existing.id,
+      electionName: existing.name,
+      electionStatus: existing.status,
+    },
+  });
+
+  res.json({ message: 'Eleição e dados relacionados excluídos com sucesso' });
 });

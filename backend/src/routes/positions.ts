@@ -18,7 +18,8 @@ const basePositionSchema = z.object({
   description: z.string().optional().nullable(),
   scope: z.enum(['NACIONAL', 'ESTADUAL', 'MUNICIPAL']).default('ESTADUAL'),
   defaultDigitCount: z.number().int().min(1).max(6).default(2),
-  defaultSlots: z.number().int().min(1).max(10).default(1),
+  defaultSlots: z.number().int().min(1).max(100).default(1),
+  defaultVotingSystem: z.enum(['MAJORITARIO', 'PROPORCIONAL']).default('MAJORITARIO'),
   isNational: z.boolean().optional(),
 });
 
@@ -45,6 +46,7 @@ positionsRouter.post('/', requireAuth, async (req: AuthRequest, res: Response): 
       scope: result.data.scope,
       defaultDigitCount: result.data.defaultDigitCount,
       defaultSlots: result.data.defaultSlots,
+      defaultVotingSystem: result.data.defaultVotingSystem,
       isNational,
     },
   });
@@ -141,8 +143,9 @@ positionsRouter.get('/election/:electionId', requireAuth, async (req, res: Respo
 const createPositionSchema = z.object({
   positionId: z.string().uuid(),
   order: z.number().int().min(1),
-  slots: z.number().int().min(1).max(10),
+  slots: z.number().int().min(1).max(100),
   digitCount: z.number().int().min(1).max(6),
+  votingSystem: z.enum(['MAJORITARIO', 'PROPORCIONAL']).default('MAJORITARIO'),
   isNational: z.boolean().default(true),
   isActive: z.boolean().default(true),
 });
@@ -171,10 +174,10 @@ positionsRouter.post('/election/:electionId', requireAuth, async (req: AuthReque
 
   await auditService.log({
     eventType: 'POSITION_CREATED',
-    description: `Cargo "${position.position.name}" adicionado à eleição`,
+    description: `Cargo "${position.position.name}" adicionado à eleição (${position.votingSystem})`,
     electionId: req.params.electionId,
     adminUserId: req.adminUser!.id,
-    metadata: { positionId: position.id, order: position.order, slots: position.slots },
+    metadata: { positionId: position.id, order: position.order, slots: position.slots, votingSystem: position.votingSystem },
   });
 
   res.status(201).json(position);

@@ -68,6 +68,7 @@ const candidateSchema = z.object({
   viceCandidateName: z.string().optional().nullable(),
   isNational: booleanField.default(false),
   isActive: booleanField.default(true),
+  photoUrl: z.string().optional().nullable().or(z.literal('')),
 });
 
 // GET /api/candidates — lista com filtros
@@ -153,7 +154,7 @@ candidatesRouter.post(
       return;
     }
 
-    let photoUrl: string | undefined;
+    let photoUrl: string | null | undefined = undefined;
     if (req.file) {
       if (sharp) {
         try {
@@ -167,6 +168,8 @@ candidatesRouter.post(
       } else {
         photoUrl = `/uploads/${req.file.filename}`;
       }
+    } else if (result.data.photoUrl !== undefined) {
+      photoUrl = result.data.photoUrl && result.data.photoUrl.trim() !== '' ? result.data.photoUrl.trim() : null;
     }
 
     const position = await prisma.position.findUnique({ where: { id: result.data.positionId } });
@@ -242,10 +245,25 @@ candidatesRouter.put(
         photoUrl = `/uploads/${req.file.filename}`;
       }
 
-      // Remover foto antiga
-      if (existing.photoUrl) {
+      // Remover foto antiga se era arquivo local
+      if (existing.photoUrl && existing.photoUrl.startsWith('/uploads/')) {
         const oldPath = path.join(process.cwd(), existing.photoUrl);
         await fs.unlink(oldPath).catch(() => {});
+      }
+    } else if (result.data.photoUrl !== undefined) {
+      const rawPhoto = result.data.photoUrl ? result.data.photoUrl.trim() : '';
+      if (rawPhoto === '' || rawPhoto === 'CLEAR') {
+        photoUrl = null;
+        if (existing.photoUrl && existing.photoUrl.startsWith('/uploads/')) {
+          const oldPath = path.join(process.cwd(), existing.photoUrl);
+          await fs.unlink(oldPath).catch(() => {});
+        }
+      } else {
+        photoUrl = rawPhoto;
+        if (existing.photoUrl && existing.photoUrl !== rawPhoto && existing.photoUrl.startsWith('/uploads/')) {
+          const oldPath = path.join(process.cwd(), existing.photoUrl);
+          await fs.unlink(oldPath).catch(() => {});
+        }
       }
     }
 
@@ -302,7 +320,7 @@ candidatesRouter.delete('/:id', requireAuth, async (req: AuthRequest, res: Respo
     return;
   }
 
-  if (existing.photoUrl) {
+  if (existing.photoUrl && existing.photoUrl.startsWith('/uploads/')) {
     const oldPath = path.join(process.cwd(), existing.photoUrl);
     await fs.unlink(oldPath).catch(() => {});
   }
