@@ -396,83 +396,53 @@ export const ResultsPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="results-header-actions">
           <button
             onClick={fetchResults}
+            className="results-header-btn"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.5rem 1rem',
               background: '#334155',
               color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
             }}
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            Atualizar Apuração
+            <span>Atualizar Apuração</span>
           </button>
 
           <button
             onClick={() => setShowBuPreview(true)}
+            className="results-header-btn"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.5rem 1rem',
               background: '#334155',
               color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
             }}
             title="Visualizar modelo oficial do Boletim de Urna (A4) na tela antes de imprimir"
           >
-            <Eye size={16} /> Prévia do BU
+            <Eye size={16} /> <span>Prévia do BU</span>
           </button>
 
           <button
             onClick={handlePrint}
+            className="results-header-btn"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.5rem 1rem',
               background: 'linear-gradient(135deg, #1e3d5e, #1565c0)',
               color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
             }}
             title="Imprimir ou Salvar em PDF o Boletim de Urna Oficial"
           >
-            <Printer size={16} /> Imprimir / Salvar PDF
+            <Printer size={16} /> <span>Imprimir / Salvar PDF</span>
           </button>
 
           <button
             onClick={handleExportCsv}
+            className="results-header-btn results-btn-csv"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.5rem 1rem',
               background: '#059669',
               color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
             }}
+            title="Exportar resultados consolidados em formato CSV"
           >
-            <Download size={16} /> Exportar CSV
+            <Download size={16} /> <span>Exportar CSV</span>
           </button>
         </div>
       </div>
