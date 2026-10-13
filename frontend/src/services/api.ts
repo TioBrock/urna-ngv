@@ -181,9 +181,12 @@ export const positionsApi = {
       positionId: string;
       order: number;
       slots: number;
+      choicesPerVoter?: number;
       digitCount: number;
       isNational: boolean;
       votingSystem?: string;
+      hasSecondRound?: boolean;
+      distributionType?: string;
     }
   ): Promise<ElectionPosition> => {
     const res = await api.post(`/positions/election/${electionId}`, data);
@@ -200,10 +203,13 @@ export const positionsApi = {
     data: Partial<{
       order: number;
       slots: number;
+      choicesPerVoter: number;
       digitCount: number;
       isNational: boolean;
       isActive: boolean;
       votingSystem: string;
+      hasSecondRound: boolean;
+      distributionType: string;
     }>
   ): Promise<ElectionPosition> => {
     const res = await api.put(`/positions/${id}`, data);

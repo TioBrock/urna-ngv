@@ -44,6 +44,9 @@ CREATE TABLE "elections" (
     "status" "ElectionStatus" NOT NULL DEFAULT 'DRAFT',
     "startDate" TIMESTAMP(3),
     "endDate" TIMESTAMP(3),
+    "parentElectionId" TEXT,
+    "round" INTEGER NOT NULL DEFAULT 1,
+    "finalResults" JSONB,
     "showResultsDuringVoting" BOOLEAN NOT NULL DEFAULT false,
     "sessionTimeoutHours" INTEGER NOT NULL DEFAULT 2,
     "validateIp" BOOLEAN NOT NULL DEFAULT true,
@@ -71,7 +74,10 @@ CREATE TABLE "positions" (
     "scope" TEXT NOT NULL DEFAULT 'ESTADUAL',
     "defaultDigitCount" INTEGER NOT NULL DEFAULT 2,
     "defaultSlots" INTEGER NOT NULL DEFAULT 1,
+    "defaultChoicesPerVoter" INTEGER NOT NULL DEFAULT 1,
     "defaultVotingSystem" TEXT NOT NULL DEFAULT 'MAJORITARIO',
+    "defaultHasSecondRound" BOOLEAN NOT NULL DEFAULT false,
+    "defaultDistribution" TEXT NOT NULL DEFAULT 'ESTADUAL',
     "isNational" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -86,14 +92,30 @@ CREATE TABLE "election_positions" (
     "positionId" TEXT NOT NULL,
     "order" INTEGER NOT NULL,
     "slots" INTEGER NOT NULL DEFAULT 1,
+    "choicesPerVoter" INTEGER NOT NULL DEFAULT 1,
     "digitCount" INTEGER NOT NULL DEFAULT 2,
     "votingSystem" TEXT NOT NULL DEFAULT 'MAJORITARIO',
+    "hasSecondRound" BOOLEAN NOT NULL DEFAULT false,
+    "distributionType" TEXT NOT NULL DEFAULT 'ESTADUAL',
     "isNational" BOOLEAN NOT NULL DEFAULT true,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "election_positions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "election_position_states" (
+    "id" TEXT NOT NULL,
+    "electionPositionId" TEXT NOT NULL,
+    "stateId" TEXT NOT NULL,
+    "slots" INTEGER NOT NULL DEFAULT 1,
+    "hasSecondRound" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "election_position_states_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -237,4 +259,16 @@ ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_electionId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_adminUserId_fkey" FOREIGN KEY ("adminUserId") REFERENCES "admin_users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "election_position_states_electionPositionId_stateId_key" ON "election_position_states"("electionPositionId", "stateId");
+
+-- AddForeignKey
+ALTER TABLE "elections" ADD CONSTRAINT "elections_parentElectionId_fkey" FOREIGN KEY ("parentElectionId") REFERENCES "elections"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "election_position_states" ADD CONSTRAINT "election_position_states_electionPositionId_fkey" FOREIGN KEY ("electionPositionId") REFERENCES "election_positions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "election_position_states" ADD CONSTRAINT "election_position_states_stateId_fkey" FOREIGN KEY ("stateId") REFERENCES "states"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

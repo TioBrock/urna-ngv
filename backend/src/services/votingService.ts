@@ -106,6 +106,7 @@ export const votingService = {
           name: ep.position.name,
           order: ep.order,
           slots: ep.slots,
+          choicesPerVoter: ep.choicesPerVoter,
           digitCount: ep.digitCount,
           isNational: ep.isNational,
         })),
@@ -217,8 +218,8 @@ export const votingService = {
       if (!electionPosition || electionPosition.electionId !== session.electionId) {
         throw new AppError('Cargo inválido para esta eleição', 400);
       }
-      if (slot < 1 || slot > electionPosition.slots) {
-        throw new AppError(`Vaga inválida. Este cargo possui ${electionPosition.slots} vaga(s).`, 400);
+      if (slot < 1 || slot > electionPosition.choicesPerVoter) {
+        throw new AppError(`Escolha inválida. Este cargo permite ${electionPosition.choicesPerVoter} voto(s) por eleitor.`, 400);
       }
 
       // 4. Validar candidato para votos válidos
@@ -249,8 +250,8 @@ export const votingService = {
           throw new AppError('Candidato não disponível para o seu estado', 400);
         }
 
-        // 5. Verificar candidato repetido em vagas múltiplas
-        if (electionPosition.slots > 1 && slot > 1) {
+        // 5. Verificar candidato repetido em escolhas múltiplas do mesmo cargo
+        if (electionPosition.choicesPerVoter > 1 && slot > 1) {
           const previousVote = await tx.vote.findFirst({
             where: {
               voterSessionId: sessionId,
@@ -262,7 +263,7 @@ export const votingService = {
           if (previousVote) {
             await auditService.log({
               eventType: 'DUPLICATE_CANDIDATE_ATTEMPT',
-              description: `Candidato já selecionado em vaga anterior — sessão ${sessionId}`,
+              description: `Candidato já selecionado em escolha anterior deste cargo — sessão ${sessionId}`,
               electionId: session.electionId,
               ip,
               metadata: { candidateId, electionPositionId, slot },
@@ -298,8 +299,8 @@ export const votingService = {
       let nextSlot = session.currentSlot;
       let isFinished = false;
 
-      if (slot < currentPos.slots) {
-        // Próxima vaga do mesmo cargo
+      if (slot < currentPos.choicesPerVoter) {
+        // Próxima escolha do mesmo cargo
         nextSlot = slot + 1;
       } else if (currentPosIndex + 1 < positions.length) {
         // Próximo cargo

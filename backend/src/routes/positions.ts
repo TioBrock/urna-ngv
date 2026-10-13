@@ -19,7 +19,10 @@ const basePositionSchema = z.object({
   scope: z.enum(['NACIONAL', 'ESTADUAL', 'MUNICIPAL']).default('ESTADUAL'),
   defaultDigitCount: z.number().int().min(1).max(6).default(2),
   defaultSlots: z.number().int().min(1).max(100).default(1),
+  defaultChoicesPerVoter: z.number().int().min(1).max(20).default(1),
   defaultVotingSystem: z.enum(['MAJORITARIO', 'PROPORCIONAL']).default('MAJORITARIO'),
+  defaultHasSecondRound: z.boolean().default(false),
+  defaultDistribution: z.enum(['NACIONAL', 'ESTADUAL', 'TOTAL_DISTRIBUIDO']).default('ESTADUAL'),
   isNational: z.boolean().optional(),
 });
 
@@ -39,6 +42,12 @@ positionsRouter.post('/', requireAuth, async (req: AuthRequest, res: Response): 
     return;
   }
 
+  if (result.data.defaultHasSecondRound) {
+    if (result.data.defaultVotingSystem !== 'MAJORITARIO' || result.data.defaultSlots !== 1) {
+      throw new AppError('O segundo turno só pode ser habilitado em cargos com sistema Majoritário e 1 vaga.', 400);
+    }
+  }
+
   const position = await prisma.position.create({
     data: {
       name: result.data.name,
@@ -46,7 +55,10 @@ positionsRouter.post('/', requireAuth, async (req: AuthRequest, res: Response): 
       scope: result.data.scope,
       defaultDigitCount: result.data.defaultDigitCount,
       defaultSlots: result.data.defaultSlots,
+      defaultChoicesPerVoter: result.data.defaultChoicesPerVoter,
       defaultVotingSystem: result.data.defaultVotingSystem,
+      defaultHasSecondRound: result.data.defaultHasSecondRound,
+      defaultDistribution: result.data.defaultDistribution,
       isNational,
     },
   });
@@ -78,6 +90,14 @@ positionsRouter.put('/base/:id', requireAuth, async (req: AuthRequest, res: Resp
   let isNational = result.data.isNational;
   if (result.data.scope) {
     isNational = result.data.scope === 'NACIONAL';
+  }
+
+  const votingSys = result.data.defaultVotingSystem ?? existing.defaultVotingSystem;
+  const slots = result.data.defaultSlots ?? existing.defaultSlots;
+  const hasSecondRound = result.data.defaultHasSecondRound ?? existing.defaultHasSecondRound;
+
+  if (hasSecondRound && (votingSys !== 'MAJORITARIO' || slots !== 1)) {
+    throw new AppError('O segundo turno só pode ser habilitado em cargos com sistema Majoritário e 1 vaga.', 400);
   }
 
   const updated = await prisma.position.update({
@@ -134,20 +154,33 @@ positionsRouter.get('/election/:electionId', requireAuth, async (req, res: Respo
     orderBy: { order: 'asc' },
     include: {
       position: true,
+      positionStates: {
+        include: { state: { select: { id: true, name: true, abbreviation: true } } },
+      },
       _count: { select: { votes: true } },
     },
   });
   res.json(positions);
 });
 
+const stateConfigSchema = z.object({
+  stateId: z.string().uuid(),
+  slots: z.number().int().min(1).max(100),
+  hasSecondRound: z.boolean().default(false),
+});
+
 const createPositionSchema = z.object({
   positionId: z.string().uuid(),
   order: z.number().int().min(1),
   slots: z.number().int().min(1).max(100),
+  choicesPerVoter: z.number().int().min(1).max(20).default(1),
   digitCount: z.number().int().min(1).max(6),
   votingSystem: z.enum(['MAJORITARIO', 'PROPORCIONAL']).default('MAJORITARIO'),
+  hasSecondRound: z.boolean().default(false),
+  distributionType: z.enum(['NACIONAL', 'ESTADUAL', 'TOTAL_DISTRIBUIDO']).default('ESTADUAL'),
   isNational: z.boolean().default(true),
   isActive: z.boolean().default(true),
+  stateConfigurations: z.array(stateConfigSchema).optional(),
 });
 
 // POST /api/positions/election/:electionId
@@ -167,17 +200,58 @@ positionsRouter.post('/election/:electionId', requireAuth, async (req: AuthReque
     throw new AppError('Não é possível alterar cargos de uma eleição aberta ou encerrada', 409);
   }
 
+  const { stateConfigurations, ...positionData } = result.data;
+
+  // Validação de segundo turno: somente permitido para sistema Majoritário com 1 vaga
+  if (positionData.hasSecondRound && (positionData.votingSystem !== 'MAJORITARIO' || positionData.slots !== 1)) {
+    throw new AppError('O segundo turno só pode ser configurado em disputas majoritárias de vaga única (1 vaga).', 400);
+  }
+
+  // Validação de distribuição territorial: se TOTAL_DISTRIBUIDO, a soma das vagas estaduais deve bater com o total
+  if (positionData.distributionType === 'TOTAL_DISTRIBUIDO') {
+    if (!stateConfigurations || stateConfigurations.length === 0) {
+      throw new AppError('Para o modelo "Total nacional distribuído por estado", informe a distribuição de vagas para os estados participantes.', 400);
+    }
+    const sumStateSlots = stateConfigurations.reduce((acc, cur) => acc + cur.slots, 0);
+    if (sumStateSlots !== positionData.slots) {
+      throw new AppError(`A soma das vagas distribuídas entre os estados (${sumStateSlots}) deve ser exatamente igual ao total de vagas do cargo (${positionData.slots}).`, 400);
+    }
+  }
+
   const position = await prisma.electionPosition.create({
-    data: { electionId: req.params.electionId, ...result.data },
-    include: { position: true },
+    data: {
+      electionId: req.params.electionId,
+      ...positionData,
+      positionStates: stateConfigurations?.length
+        ? {
+            create: stateConfigurations.map((sc) => ({
+              stateId: sc.stateId,
+              slots: sc.slots,
+              hasSecondRound: sc.hasSecondRound && positionData.votingSystem === 'MAJORITARIO' && sc.slots === 1,
+            })),
+          }
+        : undefined,
+    },
+    include: {
+      position: true,
+      positionStates: { include: { state: true } },
+    },
   });
 
   await auditService.log({
     eventType: 'POSITION_CREATED',
-    description: `Cargo "${position.position.name}" adicionado à eleição (${position.votingSystem})`,
+    description: `Cargo "${position.position.name}" adicionado à eleição (${position.votingSystem}) — ${position.slots} vaga(s), ${position.choicesPerVoter} escolha(s)/eleitor`,
     electionId: req.params.electionId,
     adminUserId: req.adminUser!.id,
-    metadata: { positionId: position.id, order: position.order, slots: position.slots, votingSystem: position.votingSystem },
+    metadata: {
+      positionId: position.id,
+      order: position.order,
+      slots: position.slots,
+      choicesPerVoter: position.choicesPerVoter,
+      votingSystem: position.votingSystem,
+      hasSecondRound: position.hasSecondRound,
+      distributionType: position.distributionType,
+    },
   });
 
   res.status(201).json(position);
@@ -193,7 +267,7 @@ positionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
 
   const existing = await prisma.electionPosition.findUnique({
     where: { id: req.params.id },
-    include: { election: true, position: true },
+    include: { election: true, position: true, positionStates: true },
   });
   if (!existing) {
     res.status(404).json({ error: 'Cargo não encontrado' });
@@ -203,17 +277,59 @@ positionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
     throw new AppError('Não é possível alterar cargos de uma eleição aberta ou encerrada', 409);
   }
 
-  const updated = await prisma.electionPosition.update({
-    where: { id: req.params.id },
-    data: result.data,
-    include: { position: true },
+  const { stateConfigurations, ...positionData } = result.data;
+  const targetSlots = positionData.slots ?? existing.slots;
+  const targetVotingSystem = positionData.votingSystem ?? existing.votingSystem;
+  const targetHasSecondRound = positionData.hasSecondRound ?? existing.hasSecondRound;
+  const targetDistType = positionData.distributionType ?? existing.distributionType;
+
+  if (targetHasSecondRound && (targetVotingSystem !== 'MAJORITARIO' || targetSlots !== 1)) {
+    throw new AppError('O segundo turno só pode ser configurado em disputas majoritárias de vaga única (1 vaga).', 400);
+  }
+
+  if (targetDistType === 'TOTAL_DISTRIBUIDO' && stateConfigurations !== undefined) {
+    const sumStateSlots = stateConfigurations.reduce((acc, cur) => acc + cur.slots, 0);
+    if (sumStateSlots !== targetSlots) {
+      throw new AppError(`A soma das vagas distribuídas entre os estados (${sumStateSlots}) deve ser exatamente igual ao total de vagas do cargo (${targetSlots}).`, 400);
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    if (stateConfigurations !== undefined) {
+      await tx.electionPositionState.deleteMany({ where: { electionPositionId: req.params.id } });
+      if (stateConfigurations.length > 0) {
+        await tx.electionPositionState.createMany({
+          data: stateConfigurations.map((sc) => ({
+            electionPositionId: req.params.id,
+            stateId: sc.stateId,
+            slots: sc.slots,
+            hasSecondRound: sc.hasSecondRound && targetVotingSystem === 'MAJORITARIO' && sc.slots === 1,
+          })),
+        });
+      }
+    }
+
+    return tx.electionPosition.update({
+      where: { id: req.params.id },
+      data: positionData,
+      include: {
+        position: true,
+        positionStates: { include: { state: true } },
+      },
+    });
   });
 
   await auditService.log({
     eventType: 'POSITION_UPDATED',
-    description: `Cargo "${updated.position.name}" atualizado`,
+    description: `Cargo "${updated.position.name}" atualizado — ${updated.slots} vaga(s), ${updated.choicesPerVoter} escolha(s)/eleitor`,
     electionId: existing.electionId,
     adminUserId: req.adminUser!.id,
+    metadata: {
+      slots: updated.slots,
+      choicesPerVoter: updated.choicesPerVoter,
+      hasSecondRound: updated.hasSecondRound,
+      distributionType: updated.distributionType,
+    },
   });
 
   res.json(updated);

@@ -91,10 +91,11 @@ model State {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  electionStates ElectionState[]
-  candidates     Candidate[]
-  voterSessions  VoterSession[]
-  votes          Vote[]
+  electionStates         ElectionState[]
+  electionPositionStates ElectionPositionState[]
+  candidates             Candidate[]
+  voterSessions          VoterSession[]
+  votes                  Vote[]
 
   @@map("states")
 }
@@ -112,6 +113,11 @@ model Election {
   startDate   DateTime?
   endDate     DateTime?
 
+  // Relação de segundo turno (eleição independente filha de uma de 1º turno)
+  parentElectionId String?
+  round            Int            @default(1) // 1 = 1º Turno, 2 = 2º Turno
+  finalResults     Json?          // Snapshot oficial consolidado ao encerrar
+
   // Configurações da eleição
   showResultsDuringVoting Boolean @default(false)
   sessionTimeoutHours     Int     @default(2)
@@ -120,6 +126,8 @@ model Election {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  parentElection     Election?          @relation("ElectionRounds", fields: [parentElectionId], references: [id], onDelete: SetNull)
+  childElections     Election[]         @relation("ElectionRounds")
   electionStates     ElectionState[]
   electionPositions  ElectionPosition[]
   candidates         Candidate[]
@@ -150,16 +158,19 @@ model ElectionState {
 
 // Cargo-base (ex: "Presidente", "Senador") — reutilizável entre eleições
 model Position {
-  id                  String   @id @default(uuid())
-  name                String   @unique
-  description         String?
-  scope               String   @default("ESTADUAL") // NACIONAL, ESTADUAL, MUNICIPAL
-  defaultDigitCount   Int      @default(2)
-  defaultSlots        Int      @default(1)
-  defaultVotingSystem String   @default("MAJORITARIO") // MAJORITARIO, PROPORCIONAL
-  isNational          Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  name                   String   @unique
+  description            String?
+  scope                  String   @default("ESTADUAL") // NACIONAL, ESTADUAL, MUNICIPAL
+  defaultDigitCount      Int      @default(2)
+  defaultSlots           Int      @default(1)
+  defaultChoicesPerVoter Int      @default(1) // Quantidade padrão de escolhas por eleitor
+  defaultVotingSystem    String   @default("MAJORITARIO") // MAJORITARIO, PROPORCIONAL
+  defaultHasSecondRound  Boolean  @default(false) // Admite segundo turno por padrão
+  defaultDistribution   String   @default("ESTADUAL") // NACIONAL, ESTADUAL, TOTAL_DISTRIBUIDO
+  isNational             Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   electionPositions ElectionPosition[]
   candidates        Candidate[]
@@ -169,26 +180,47 @@ model Position {
 
 // Cargo configurado para uma eleição específica
 model ElectionPosition {
-  id           String   @id @default(uuid())
-  electionId   String
-  positionId   String
-  order        Int      // Ordem na sequência de votação
-  slots        Int      @default(1)  // Quantidade de vagas
-  digitCount   Int      @default(2)  // Quantidade de dígitos do número
-  votingSystem String   @default("MAJORITARIO") // MAJORITARIO, PROPORCIONAL
-  isNational   Boolean  @default(true)  // true = mesmo candidatos para todos os estados
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(uuid())
+  electionId       String
+  positionId       String
+  order            Int      // Ordem na sequência de votação
+  slots            Int      @default(1)  // Quantidade de vagas (total ou padrão)
+  choicesPerVoter  Int      @default(1)  // Quantidade máxima de escolhas permitidas por eleitor
+  digitCount       Int      @default(2)  // Quantidade de dígitos do número
+  votingSystem     String   @default("MAJORITARIO") // MAJORITARIO, PROPORCIONAL
+  hasSecondRound   Boolean  @default(false) // Admite segundo turno nesta eleição
+  distributionType String   @default("ESTADUAL") // NACIONAL, ESTADUAL, TOTAL_DISTRIBUIDO
+  isNational       Boolean  @default(true)  // true = mesmos candidatos para todos os estados
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   election Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
   position Position  @relation(fields: [positionId], references: [id])
 
-  votes Vote[]
+  votes          Vote[]
+  positionStates ElectionPositionState[]
 
   @@unique([electionId, positionId])
   @@unique([electionId, order])
   @@map("election_positions")
+}
+
+// Configuração territorial de vagas e segundo turno por estado (quando aplicável)
+model ElectionPositionState {
+  id                 String   @id @default(uuid())
+  electionPositionId String
+  stateId            String
+  slots              Int      @default(1)
+  hasSecondRound     Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  electionPosition ElectionPosition @relation(fields: [electionPositionId], references: [id], onDelete: Cascade)
+  state            State            @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@unique([electionPositionId, stateId])
+  @@map("election_position_states")
 }
 
 // ─────────────────────────────────────────────────────────

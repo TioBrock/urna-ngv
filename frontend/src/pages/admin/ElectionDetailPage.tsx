@@ -17,18 +17,22 @@ export const ElectionDetailPage: React.FC = () => {
   const [selectedBasePosId, setSelectedBasePosId] = useState('');
   const [posOrder, setPosOrder] = useState(1);
   const [posSlots, setPosSlots] = useState(1);
+  const [posChoicesPerVoter, setPosChoicesPerVoter] = useState(1);
   const [posDigits, setPosDigits] = useState(2);
   const [posIsNational, setPosIsNational] = useState(false);
   const [posVotingSystem, setPosVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
+  const [posHasSecondRound, setPosHasSecondRound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Form para editar cargo da eleição
   const [editingElectionPos, setEditingElectionPos] = useState<any | null>(null);
   const [editPosOrder, setEditPosOrder] = useState(1);
   const [editPosSlots, setEditPosSlots] = useState(1);
+  const [editPosChoicesPerVoter, setEditPosChoicesPerVoter] = useState(1);
   const [editPosDigits, setEditPosDigits] = useState(2);
   const [editPosIsNational, setEditPosIsNational] = useState(false);
   const [editPosVotingSystem, setEditPosVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
+  const [editPosHasSecondRound, setEditPosHasSecondRound] = useState(false);
 
   const fetchDetails = () => {
     if (!id) return;
@@ -41,8 +45,10 @@ export const ElectionDetailPage: React.FC = () => {
           setSelectedBasePosId(bPos[0].id);
           setPosDigits(bPos[0].defaultDigitCount || 2);
           setPosSlots(bPos[0].defaultSlots || 1);
+          setPosChoicesPerVoter((bPos[0] as any).defaultChoicesPerVoter || 1);
           setPosIsNational(bPos[0].isNational);
           setPosVotingSystem((bPos[0].defaultVotingSystem as any) || 'MAJORITARIO');
+          setPosHasSecondRound((bPos[0] as any).defaultHasSecondRound || false);
         }
         // Sugere próxima ordem
         const maxOrder = elec.electionPositions?.reduce((max, p) => Math.max(max, p.order), 0) ?? 0;
@@ -62,8 +68,10 @@ export const ElectionDetailPage: React.FC = () => {
     if (pos) {
       setPosDigits(pos.defaultDigitCount);
       setPosSlots(pos.defaultSlots);
+      setPosChoicesPerVoter((pos as any).defaultChoicesPerVoter || 1);
       setPosIsNational(pos.isNational);
       setPosVotingSystem((pos.defaultVotingSystem as any) || 'MAJORITARIO');
+      setPosHasSecondRound((pos as any).defaultHasSecondRound || false);
     }
   };
 
@@ -77,9 +85,11 @@ export const ElectionDetailPage: React.FC = () => {
         positionId: selectedBasePosId,
         order: Number(posOrder),
         slots: Number(posSlots),
+        choicesPerVoter: Number(posChoicesPerVoter),
         digitCount: Number(posDigits),
         isNational: posIsNational,
         votingSystem: posVotingSystem,
+        hasSecondRound: posHasSecondRound,
       });
 
       toast.success('Cargo adicionado à cédula eleitoral!');
@@ -96,9 +106,11 @@ export const ElectionDetailPage: React.FC = () => {
     setEditingElectionPos(ep);
     setEditPosOrder(ep.order);
     setEditPosSlots(ep.slots);
+    setEditPosChoicesPerVoter(ep.choicesPerVoter || 1);
     setEditPosDigits(ep.digitCount);
     setEditPosIsNational(ep.isNational);
     setEditPosVotingSystem((ep.votingSystem as any) || 'MAJORITARIO');
+    setEditPosHasSecondRound(ep.hasSecondRound || false);
     setShowEditPosModal(true);
   };
 
@@ -111,9 +123,11 @@ export const ElectionDetailPage: React.FC = () => {
       await positionsApi.updateElectionPosition(editingElectionPos.id, {
         order: Number(editPosOrder),
         slots: Number(editPosSlots),
+        choicesPerVoter: Number(editPosChoicesPerVoter),
         digitCount: Number(editPosDigits),
         isNational: editPosIsNational,
         votingSystem: editPosVotingSystem,
+        hasSecondRound: editPosHasSecondRound,
       });
 
       toast.success('Cargo atualizado com sucesso!');
@@ -288,8 +302,10 @@ export const ElectionDetailPage: React.FC = () => {
                 <th>Cargo</th>
                 <th>Dígitos</th>
                 <th>Vagas</th>
+                <th>Escolhas/Eleitor</th>
                 <th>Âmbito</th>
                 <th>Sistema</th>
+                <th>2º Turno</th>
                 <th>Votos Gravados</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
@@ -312,6 +328,9 @@ export const ElectionDetailPage: React.FC = () => {
                     </td>
                     <td>{ep.digitCount} dígitos</td>
                     <td>{ep.slots} vaga(s)</td>
+                    <td style={{ color: (ep as any).choicesPerVoter > 1 ? '#34d399' : '#94a3b8' }}>
+                      {(ep as any).choicesPerVoter || 1}
+                    </td>
                     <td>
                       <span
                         style={{
@@ -340,6 +359,13 @@ export const ElectionDetailPage: React.FC = () => {
                       >
                         {ep.votingSystem === 'PROPORCIONAL' ? 'Proporcional' : 'Majoritário'}
                       </span>
+                    </td>
+                    <td>
+                      {(ep as any).hasSecondRound ? (
+                        <span style={{ color: '#f59e0b', fontSize: '0.75rem', fontWeight: 700 }}>✓ Sim</span>
+                      ) : (
+                        <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>
+                      )}
                     </td>
                     <td>{ep._count?.votes ?? 0}</td>
                     <td style={{ textAlign: 'right' }}>
@@ -499,7 +525,7 @@ export const ElectionDetailPage: React.FC = () => {
                   <input
                     type="number"
                     min={1}
-                    max={10}
+                    max={100}
                     value={posSlots}
                     onChange={(e) => setPosSlots(Number(e.target.value))}
                     required
@@ -513,19 +539,48 @@ export const ElectionDetailPage: React.FC = () => {
                       outline: 'none',
                     }}
                   />
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                    Quantidade de pessoas eleitas
+                  </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', paddingTop: '1.25rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', color: '#cbd5e1' }}>
-                    <input
-                      type="checkbox"
-                      checked={posIsNational}
-                      onChange={(e) => setPosIsNational(e.target.checked)}
-                      style={{ width: '16px', height: '16px' }}
-                    />
-                    Cargo Nacional (ex: Presidente)
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: '4px' }}>
+                    ESCOLHAS POR ELEITOR
                   </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={posChoicesPerVoter}
+                    onChange={(e) => setPosChoicesPerVoter(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                      outline: 'none',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                    Votos que o eleitor pode registrar
+                  </span>
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', paddingTop: '0.25rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', color: '#cbd5e1' }}>
+                  <input
+                    type="checkbox"
+                    checked={posIsNational}
+                    onChange={(e) => setPosIsNational(e.target.checked)}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  Cargo Nacional (ex: Presidente)
+                </label>
               </div>
 
               <div>
@@ -534,7 +589,7 @@ export const ElectionDetailPage: React.FC = () => {
                 </label>
                 <select
                   value={posVotingSystem}
-                  onChange={(e) => setPosVotingSystem(e.target.value as any)}
+                  onChange={(e) => { setPosVotingSystem(e.target.value as any); if (e.target.value !== 'MAJORITARIO') setPosHasSecondRound(false); }}
                   style={{
                     width: '100%',
                     padding: '0.75rem',
@@ -554,6 +609,30 @@ export const ElectionDetailPage: React.FC = () => {
                     : 'Eleitos os candidatos mais votados nominalmente.'}
                 </span>
               </div>
+
+              {posVotingSystem === 'MAJORITARIO' && posSlots === 1 && (
+                <div
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', color: '#fbbf24' }}>
+                    <input
+                      type="checkbox"
+                      checked={posHasSecondRound}
+                      onChange={(e) => setPosHasSecondRound(e.target.checked)}
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                    <strong>Admite 2º turno</strong> (se nenhum candidato atingir maioria absoluta &gt;50%)
+                  </label>
+                  <p style={{ fontSize: '0.7rem', color: '#94a3b8', margin: '0.4rem 0 0 1.5rem' }}>
+                    O 2º turno será criado como uma nova eleição independente, vinculada a esta.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button
@@ -679,26 +758,56 @@ export const ElectionDetailPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
-                  VAGAS A ELEGER
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={editPosSlots}
-                  onChange={(e) => setEditPosSlots(Number(e.target.value))}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    color: 'white',
-                  }}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
+                    VAGAS A ELEGER
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={editPosSlots}
+                    onChange={(e) => setEditPosSlots(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                    Quantidade de pessoas eleitas
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#34d399', marginBottom: '4px' }}>
+                    ESCOLHAS POR ELEITOR
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={editPosChoicesPerVoter}
+                    onChange={(e) => setEditPosChoicesPerVoter(Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: 'white',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                    Votos que o eleitor pode registrar
+                  </span>
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
@@ -720,7 +829,7 @@ export const ElectionDetailPage: React.FC = () => {
                 </label>
                 <select
                   value={editPosVotingSystem}
-                  onChange={(e) => setEditPosVotingSystem(e.target.value as any)}
+                  onChange={(e) => { setEditPosVotingSystem(e.target.value as any); if (e.target.value !== 'MAJORITARIO') setEditPosHasSecondRound(false); }}
                   style={{
                     width: '100%',
                     padding: '0.75rem',
@@ -740,6 +849,30 @@ export const ElectionDetailPage: React.FC = () => {
                     : 'Eleitos os candidatos mais votados nominalmente.'}
                 </span>
               </div>
+
+              {editPosVotingSystem === 'MAJORITARIO' && editPosSlots === 1 && (
+                <div
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', color: '#fbbf24' }}>
+                    <input
+                      type="checkbox"
+                      checked={editPosHasSecondRound}
+                      onChange={(e) => setEditPosHasSecondRound(e.target.checked)}
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                    <strong>Admite 2º turno</strong> (se nenhum candidato atingir maioria absoluta &gt;50%)
+                  </label>
+                  <p style={{ fontSize: '0.7rem', color: '#94a3b8', margin: '0.4rem 0 0 1.5rem' }}>
+                    O 2º turno será criado como uma nova eleição independente, vinculada a esta.
+                  </p>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button

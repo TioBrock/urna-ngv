@@ -1,0 +1,52 @@
+name: Supabase Keepalive
+
+on:
+  # Executa automaticamente uma vez por dia às 07:00 UTC (04:00 BRT)
+  schedule:
+    - cron: '0 7 * * *'
+  # Permite execução manual pela interface do GitHub Actions
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    name: Ping do banco de dados
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Executar consulta leve no Supabase
+        id: ping
+        run: |
+          echo "🕐 Iniciando ping em $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          # Consulta mínima: busca 1 registro da tabela de estados (sem dados eleitorais sensíveis)
+          HTTP_STATUS=$(curl \
+            --silent \
+            --output /tmp/supabase_response.json \
+            --write-out "%{http_code}" \
+            --max-time 30 \
+            --request GET \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/states?select=id&limit=1" \
+            --header "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            --header "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "Resposta recebida:"
+          cat /tmp/supabase_response.json || true
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Banco de dados respondeu com sucesso (HTTP $HTTP_STATUS)"
+          else
+            echo "❌ Resposta inesperada do banco de dados (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: Registrar conclusão
+        if: always()
+        run: |
+          if [ "${{ steps.ping.outcome }}" = "success" ]; then
+            echo "✅ Keepalive concluído com sucesso em $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          else
+            echo "⚠️  Keepalive falhou em $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "Isso não interrompe o sistema, mas verifique os secrets e a disponibilidade do Supabase."
+          fi
