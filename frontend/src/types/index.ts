@@ -98,6 +98,7 @@ export interface StartVotingResponse {
       name: string;
       order: number;
       slots: number;
+      choicesPerVoter?: number;
       digitCount: number;
       isNational: boolean;
     }[];
@@ -133,6 +134,9 @@ export interface CandidateResult {
   percentage: string; // % sobre votos válidos
   percentageTotal?: string; // % sobre comparecimento total
   isElected?: boolean;
+  isSecondRound?: boolean;
+  isTie?: boolean;
+  status?: 'ELEITO' | '2º TURNO' | 'EMPATE' | 'NÃO ELEITO';
   electedReason?: string;
 }
 
@@ -180,6 +184,8 @@ export interface ElectionResult {
     name: string;
     order: number;
     slots: number;
+    choicesPerVoter?: number;
+    hasSecondRound?: boolean;
     votingSystem?: string;
     isNational?: boolean;
   };

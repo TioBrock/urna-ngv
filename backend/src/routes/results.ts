@@ -39,7 +39,9 @@ function calculateElectedCandidates(
   candidatesList: Array<{ candidate: any; votes: number; percentage: string; percentageTotal?: string }>,
   validVotes: number,
   slots: number,
-  votingSystem: string
+  votingSystem: string,
+  hasSecondRound: boolean = false,
+  round: number = 1
 ): {
   rankedCandidates: Array<{
     candidate: any;
@@ -47,6 +49,9 @@ function calculateElectedCandidates(
     percentage: string;
     percentageTotal?: string;
     isElected: boolean;
+    isSecondRound?: boolean;
+    isTie?: boolean;
+    status: 'ELEITO' | '2º TURNO' | 'EMPATE' | 'NÃO ELEITO';
     electedReason?: string;
   }>;
   electoralQuotient: number | null;
@@ -54,7 +59,11 @@ function calculateElectedCandidates(
 } {
   if (candidatesList.length === 0 || validVotes <= 0 || slots <= 0) {
     return {
-      rankedCandidates: candidatesList.map((c) => ({ ...c, isElected: false })),
+      rankedCandidates: candidatesList.map((c) => ({
+        ...c,
+        isElected: false,
+        status: 'NÃO ELEITO' as const,
+      })),
       electoralQuotient: votingSystem === 'PROPORCIONAL' ? 1 : null,
       partyResults: [],
     };
@@ -63,16 +72,181 @@ function calculateElectedCandidates(
   // 1. SISTEMA MAJORITÁRIO
   if (votingSystem !== 'PROPORCIONAL') {
     const sorted = [...candidatesList].sort((a, b) => b.votes - a.votes);
-    const rankedCandidates = sorted.map((c, idx) => ({
-      ...c,
-      isElected: idx < slots && c.votes > 0,
-      electedReason: idx < slots && c.votes > 0 ? 'Majoritário (Mais votado)' : undefined,
-    }));
-    return {
-      rankedCandidates,
-      electoralQuotient: null,
-      partyResults: [],
-    };
+
+    // CASO A: Eleição de 1º Turno com Segundo Turno configurado
+    if (round === 1 && hasSecondRound) {
+      const first = sorted[0];
+      // Para ser eleito no 1º turno precisa de 50%+1 dos votos válidos (estritamente > 50%)
+      const hasAbsoluteMajority = first && first.votes > validVotes / 2;
+
+      if (hasAbsoluteMajority) {
+        const rankedCandidates = sorted.map((c, idx) => ({
+          ...c,
+          isElected: idx === 0,
+          isSecondRound: false,
+          isTie: false,
+          status: idx === 0 ? ('ELEITO' as const) : ('NÃO ELEITO' as const),
+          electedReason: idx === 0 ? 'Eleito em 1º Turno (Maioria Absoluta)' : undefined,
+        }));
+        return { rankedCandidates, electoralQuotient: null, partyResults: [] };
+      }
+
+      // NÃO houve maioria absoluta: NINGUÉM é eleito direto no 1º turno -> Classificação para 2º Turno
+      const topVotes = sorted[0].votes;
+      const secondVotes = sorted[1]?.votes ?? -1;
+
+      // Verificação de empates
+      const tieCountTop = sorted.filter((s) => s.votes === topVotes && topVotes > 0).length;
+      const tieAtSecond =
+        sorted.length > 2 &&
+        sorted[1].votes === sorted[2].votes &&
+        sorted[1].votes > 0 &&
+        topVotes > secondVotes;
+
+      const rankedCandidates = sorted.map((c, idx) => {
+        // Se 3 ou mais empataram no 1º lugar:
+        if (tieCountTop > 2 && c.votes === topVotes) {
+          return {
+            ...c,
+            isElected: false,
+            isSecondRound: false,
+            isTie: true,
+            status: 'EMPATE' as const,
+            electedReason: 'Empate para vaga de 2º Turno',
+          };
+        }
+
+        // Se exatamente 2 empataram no 1º lugar: ambos vão para o 2º turno
+        if (tieCountTop === 2 && c.votes === topVotes) {
+          return {
+            ...c,
+            isElected: false,
+            isSecondRound: true,
+            isTie: false,
+            status: '2º TURNO' as const,
+            electedReason: 'Classificado para o 2º Turno (Empate em 1º)',
+          };
+        }
+
+        // 1º colocado isolado:
+        if (idx === 0) {
+          return {
+            ...c,
+            isElected: false,
+            isSecondRound: true,
+            isTie: false,
+            status: '2º TURNO' as const,
+            electedReason: 'Classificado para o 2º Turno',
+          };
+        }
+
+        // Se há empate na 2ª vaga:
+        if (tieAtSecond && c.votes === secondVotes) {
+          return {
+            ...c,
+            isElected: false,
+            isSecondRound: false,
+            isTie: true,
+            status: 'EMPATE' as const,
+            electedReason: 'Empate para vaga de 2º Turno',
+          };
+        }
+
+        // 2º colocado isolado:
+        if (idx === 1 && !tieAtSecond && c.votes > 0) {
+          return {
+            ...c,
+            isElected: false,
+            isSecondRound: true,
+            isTie: false,
+            status: '2º TURNO' as const,
+            electedReason: 'Classificado para o 2º Turno',
+          };
+        }
+
+        // Demais não classificados:
+        return {
+          ...c,
+          isElected: false,
+          isSecondRound: false,
+          isTie: false,
+          status: 'NÃO ELEITO' as const,
+          electedReason: undefined,
+        };
+      });
+
+      return { rankedCandidates, electoralQuotient: null, partyResults: [] };
+    }
+
+    // CASO B: Segundo Turno (round === 2) OU Majoritário SEM Segundo Turno (hasSecondRound === false)
+    // "se der empate onde não tem segundo turno ou em um segundo turno, informar apenas empate."
+    if (slots === 1) {
+      const first = sorted[0];
+      const second = sorted[1];
+      const isTieAtTop = second && first.votes === second.votes && first.votes > 0;
+
+      if (isTieAtTop) {
+        const rankedCandidates = sorted.map((c) => {
+          if (c.votes === first.votes) {
+            return {
+              ...c,
+              isElected: false,
+              isTie: true,
+              status: 'EMPATE' as const,
+              electedReason: 'Empate',
+            };
+          }
+          return {
+            ...c,
+            isElected: false,
+            status: 'NÃO ELEITO' as const,
+          };
+        });
+        return { rankedCandidates, electoralQuotient: null, partyResults: [] };
+      }
+
+      // 1º colocado isolado
+      const rankedCandidates = sorted.map((c, idx) => ({
+        ...c,
+        isElected: idx === 0 && c.votes > 0,
+        status: idx === 0 && c.votes > 0 ? ('ELEITO' as const) : ('NÃO ELEITO' as const),
+        electedReason:
+          idx === 0 && c.votes > 0
+            ? round === 2
+              ? 'Eleito em 2º Turno'
+              : 'Majoritário (Mais votado)'
+            : undefined,
+      }));
+      return { rankedCandidates, electoralQuotient: null, partyResults: [] };
+    }
+
+    // Múltiplas vagas (ex: Senador com 2 vagas)
+    const cutoffIndex = slots - 1;
+    const cutoffVotes = sorted[cutoffIndex]?.votes ?? 0;
+    const nextVotes = sorted[slots]?.votes ?? -1;
+    const isTieAtCutoff = sorted.length > slots && cutoffVotes === nextVotes && cutoffVotes > 0;
+
+    const rankedCandidates = sorted.map((c, idx) => {
+      if (isTieAtCutoff && c.votes === cutoffVotes) {
+        return {
+          ...c,
+          isElected: false,
+          isTie: true,
+          status: 'EMPATE' as const,
+          electedReason: 'Empate',
+        };
+      }
+
+      const isElected = idx < slots && c.votes > 0;
+      return {
+        ...c,
+        isElected,
+        status: isElected ? ('ELEITO' as const) : ('NÃO ELEITO' as const),
+        electedReason: isElected ? 'Majoritário (Mais votado)' : undefined,
+      };
+    });
+
+    return { rankedCandidates, electoralQuotient: null, partyResults: [] };
   }
 
   // 2. SISTEMA PROPORCIONAL (Quociente Eleitoral + Quociente Partidário + Sobras D'Hondt)
@@ -168,11 +342,15 @@ function calculateElectedCandidates(
   }
 
   const sorted = [...candidatesList].sort((a, b) => b.votes - a.votes);
-  const rankedCandidates = sorted.map((c) => ({
-    ...c,
-    isElected: electedCandidateIds.has(c.candidate.id),
-    electedReason: electedReasonMap.get(c.candidate.id),
-  }));
+  const rankedCandidates = sorted.map((c) => {
+    const isElected = electedCandidateIds.has(c.candidate.id);
+    return {
+      ...c,
+      isElected,
+      status: isElected ? ('ELEITO' as const) : ('NÃO ELEITO' as const),
+      electedReason: electedReasonMap.get(c.candidate.id),
+    };
+  });
 
   const partyResults: PartySeats[] = partyList
     .map((p) => ({
@@ -290,6 +468,7 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
       if (!ep.isNational && !stateId) {
         // Apuração estado a estado
         const electedSet = new Set<string>();
+        const statusMap = new Map<string, 'ELEITO' | '2º TURNO' | 'EMPATE' | 'NÃO ELEITO'>();
         const reasonMap = new Map<string, string>();
         const consolidatedPartyMap = new Map<string, { votes: number; directSeats: number; leftoverSeats: number; totalSeats: number }>();
 
@@ -331,20 +510,25 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
             stateCandidateResults,
             stateValidVotes,
             ep.slots,
-            votingSystem
+            votingSystem,
+            ep.hasSecondRound,
+            election.round
           );
 
           const stateAbbr = es.state?.abbreviation || '';
           for (const rc of stateCalculation.rankedCandidates) {
             if (rc.isElected) {
               electedSet.add(rc.candidate.id);
-              if (rc.electedReason) {
-                const existing = reasonMap.get(rc.candidate.id);
-                reasonMap.set(
-                  rc.candidate.id,
-                  existing ? `${existing}, ${stateAbbr}` : `${rc.electedReason} [${stateAbbr}]`
-                );
-              }
+            }
+            if (rc.status && rc.status !== 'NÃO ELEITO') {
+              statusMap.set(rc.candidate.id, rc.status);
+            }
+            if (rc.electedReason) {
+              const existing = reasonMap.get(rc.candidate.id);
+              reasonMap.set(
+                rc.candidate.id,
+                existing ? `${existing}, ${stateAbbr}` : `${rc.electedReason} [${stateAbbr}]`
+              );
             }
           }
 
@@ -358,17 +542,30 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
           }
         }
 
-        if (electedSet.size === 0 && candidateResults.length > 0) {
-          const calc = calculateElectedCandidates(candidateResults, validVotes, ep.slots, votingSystem);
+        if (statusMap.size === 0 && candidateResults.length > 0) {
+          const calc = calculateElectedCandidates(
+            candidateResults,
+            validVotes,
+            ep.slots,
+            votingSystem,
+            ep.hasSecondRound,
+            election.round
+          );
           rankedCandidates = calc.rankedCandidates;
           electoralQuotient = calc.electoralQuotient;
           partyResults = calc.partyResults;
         } else {
-          rankedCandidates = candidateResults.map((c) => ({
-            ...c,
-            isElected: electedSet.has(c.candidate.id),
-            electedReason: reasonMap.get(c.candidate.id),
-          }));
+          rankedCandidates = candidateResults.map((c) => {
+            const status = statusMap.get(c.candidate.id) || (electedSet.has(c.candidate.id) ? 'ELEITO' : 'NÃO ELEITO');
+            return {
+              ...c,
+              isElected: status === 'ELEITO',
+              isSecondRound: status === '2º TURNO',
+              isTie: status === 'EMPATE',
+              status,
+              electedReason: reasonMap.get(c.candidate.id),
+            };
+          });
 
           partyResults = Array.from(consolidatedPartyMap.entries())
             .map(([party, data]) => ({
@@ -385,7 +582,14 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
         }
       } else {
         // Circunscrição única (Nacional ou Estado específico filtrado)
-        const calc = calculateElectedCandidates(candidateResults, validVotes, ep.slots, votingSystem);
+        const calc = calculateElectedCandidates(
+          candidateResults,
+          validVotes,
+          ep.slots,
+          votingSystem,
+          ep.hasSecondRound,
+          election.round
+        );
         rankedCandidates = calc.rankedCandidates;
         electoralQuotient = calc.electoralQuotient;
         partyResults = calc.partyResults;
@@ -453,6 +657,8 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
           name: ep.position.name,
           order: ep.order,
           slots: ep.slots,
+          choicesPerVoter: ep.choicesPerVoter,
+          hasSecondRound: ep.hasSecondRound,
           votingSystem,
           isNational: ep.isNational,
         },
@@ -473,7 +679,13 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
   );
 
   res.json({
-    election: { id: election.id, name: election.name, status: election.status },
+    election: {
+      id: election.id,
+      name: election.name,
+      status: election.status,
+      round: election.round,
+      parentElectionId: election.parentElectionId,
+    },
     overview: {
       totalVotes: totalVotersOverall,
       totalVoters: totalVotersOverall,
@@ -610,6 +822,7 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
 
     if (!ep.isNational && !stateId) {
       const electedSet = new Set<string>();
+      const statusMap = new Map<string, 'ELEITO' | '2º TURNO' | 'EMPATE' | 'NÃO ELEITO'>();
       const reasonMap = new Map<string, string>();
 
       const votesByCandidateAndState = await prisma.vote.groupBy({
@@ -637,6 +850,7 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
               candidate: c,
               votes: v,
               percentage: stateValidVotes > 0 ? ((v / stateValidVotes) * 100).toFixed(2) : '0.00',
+              percentageValid: stateValidVotes > 0 ? ((v / stateValidVotes) * 100).toFixed(2) : '0.00',
               percentageTotal: stateValidVotes > 0 ? ((v / stateValidVotes) * 100).toFixed(2) : '0.00',
             };
           })
@@ -649,40 +863,65 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
           stateCandidateResults,
           stateValidVotes,
           ep.slots,
-          votingSystem
+          votingSystem,
+          ep.hasSecondRound,
+          election.round
         );
 
         const stateAbbr = es.state?.abbreviation || '';
         for (const rc of stateCalculation.rankedCandidates) {
           if (rc.isElected) {
             electedSet.add(rc.candidate.id);
-            if (rc.electedReason) {
-              const existing = reasonMap.get(rc.candidate.id);
-              reasonMap.set(rc.candidate.id, existing ? `${existing}, ${stateAbbr}` : `${rc.electedReason} [${stateAbbr}]`);
-            }
+          }
+          if (rc.status && rc.status !== 'NÃO ELEITO') {
+            statusMap.set(rc.candidate.id, rc.status);
+          }
+          if (rc.electedReason) {
+            const existing = reasonMap.get(rc.candidate.id);
+            reasonMap.set(rc.candidate.id, existing ? `${existing}, ${stateAbbr}` : `${rc.electedReason} [${stateAbbr}]`);
           }
         }
       }
 
-      if (electedSet.size === 0 && candidateResults.length > 0) {
-        const calc = calculateElectedCandidates(candidateResults, validVotes, ep.slots, votingSystem);
+      if (statusMap.size === 0 && candidateResults.length > 0) {
+        const calc = calculateElectedCandidates(
+          candidateResults,
+          validVotes,
+          ep.slots,
+          votingSystem,
+          ep.hasSecondRound,
+          election.round
+        );
         rankedCandidates = calc.rankedCandidates;
       } else {
-        rankedCandidates = candidateResults.map((c) => ({
-          ...c,
-          isElected: electedSet.has(c.candidate.id),
-          electedReason: reasonMap.get(c.candidate.id),
-        }));
+        rankedCandidates = candidateResults.map((c) => {
+          const status = statusMap.get(c.candidate.id) || (electedSet.has(c.candidate.id) ? 'ELEITO' : 'NÃO ELEITO');
+          return {
+            ...c,
+            isElected: status === 'ELEITO',
+            isSecondRound: status === '2º TURNO',
+            isTie: status === 'EMPATE',
+            status,
+            electedReason: reasonMap.get(c.candidate.id),
+          };
+        });
       }
     } else {
-      const calc = calculateElectedCandidates(candidateResults, validVotes, ep.slots, votingSystem);
+      const calc = calculateElectedCandidates(
+        candidateResults,
+        validVotes,
+        ep.slots,
+        votingSystem,
+        ep.hasSecondRound,
+        election.round
+      );
       rankedCandidates = calc.rankedCandidates;
     }
 
     let colocacao = 1;
     for (const cr of rankedCandidates) {
-      const situacao = cr.isElected ? 'ELEITO' : 'NÃO ELEITO';
-      const razao = cr.electedReason || (cr.isElected ? 'Majoritário (Mais votado)' : '-');
+      const situacao = cr.status || (cr.isElected ? 'ELEITO' : 'NÃO ELEITO');
+      const razao = cr.electedReason || (cr.isElected ? 'Majoritário (Mais votado)' : situacao === 'EMPATE' ? 'Empate' : situacao === '2º TURNO' ? '2º Turno' : '-');
       lines.push(
         [
           escapeCsv(ep.position.name),

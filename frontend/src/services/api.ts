@@ -298,7 +298,7 @@ export const resultsApi = {
     electionId: string,
     stateId?: string
   ): Promise<{
-    election: { id: string; name: string; status: string };
+    election: { id: string; name: string; status: string; round?: number; parentElectionId?: string | null };
     overview: ResultsOverview;
     results: ElectionResult[];
   }> => {

@@ -200,10 +200,13 @@ const BoletimUrnaDocument: React.FC<{
                     </tr>
                   ) : (
                     res.candidates.map((c, idx) => {
-                      const isElected = c.isElected ?? (idx < res.electionPosition.slots && c.votes > 0);
+                      const status = c.status || (c.isElected ? 'ELEITO' : 'NÃO ELEITO');
+                      const isElected = status === 'ELEITO';
+                      const isSecondRound = status === '2º TURNO';
+                      const isTie = status === 'EMPATE';
                       return (
                         <tr key={c.candidate.id} className={isElected ? 'bu-row-elected' : ''}>
-                          <td style={{ fontWeight: 700, color: isElected ? '#15803d' : '#4b5563' }}>
+                          <td style={{ fontWeight: 700, color: isElected ? '#15803d' : isSecondRound ? '#b45309' : isTie ? '#a16207' : '#4b5563' }}>
                             {idx + 1}º
                           </td>
                           <td style={{ fontWeight: isElected ? 700 : 500 }}>
@@ -225,6 +228,14 @@ const BoletimUrnaDocument: React.FC<{
                           <td style={{ textAlign: 'center' }}>
                             {isElected ? (
                               <span className="bu-badge-elected">ELEITO</span>
+                            ) : isSecondRound ? (
+                              <span style={{ display: 'inline-block', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 6px', fontSize: '7pt', fontWeight: 800 }}>
+                                2º TURNO
+                              </span>
+                            ) : isTie ? (
+                              <span style={{ display: 'inline-block', background: '#fef9c3', color: '#854d0e', border: '1px solid #fef08a', borderRadius: '4px', padding: '1px 6px', fontSize: '7pt', fontWeight: 800 }}>
+                                EMPATE
+                              </span>
                             ) : (
                               <span className="bu-badge-not-elected">NÃO ELEITO</span>
                             )}
@@ -709,7 +720,21 @@ export const ResultsPage: React.FC = () => {
                     >
                       {(res.votingSystem || 'MAJORITARIO') === 'PROPORCIONAL' ? '⊖ Proporcional (D’Hondt)' : '✓ Majoritário'}
                     </span>
-                    {isMultiSlot && (res.votingSystem || 'MAJORITARIO') !== 'PROPORCIONAL' && (
+                    {res.electionPosition.hasSecondRound && (resultsData?.election.round ?? 1) === 1 ? (
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          background: 'rgba(245, 158, 11, 0.1)',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          borderRadius: '4px',
+                          padding: '2px 8px',
+                          color: '#fbbf24',
+                          fontWeight: 700,
+                        }}
+                      >
+                        ⚖️ Requer maioria absoluta (&gt; 50% dos válidos) para eleição em 1º Turno (ou 2º Turno entre os 2 primeiros)
+                      </span>
+                    ) : isMultiSlot && (res.votingSystem || 'MAJORITARIO') !== 'PROPORCIONAL' ? (
                       <span
                         style={{
                           fontSize: '0.75rem',
@@ -723,7 +748,7 @@ export const ResultsPage: React.FC = () => {
                       >
                         🏆 Os {res.electionPosition.slots} mais votados no total são eleitos
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -993,14 +1018,23 @@ export const ResultsPage: React.FC = () => {
                       </thead>
                       <tbody>
                         {res.candidates.map((c, idx) => {
-                          const isElected = c.isElected ?? (idx < res.electionPosition.slots && c.votes > 0);
+                          const status = c.status || (c.isElected ? 'ELEITO' : 'NÃO ELEITO');
+                          const isElected = status === 'ELEITO';
+                          const isSecondRound = status === '2º TURNO';
+                          const isTie = status === 'EMPATE';
                           const barColor = CHART_COLORS[idx % CHART_COLORS.length];
 
                           return (
                             <tr
                               key={c.candidate.id}
                               style={{
-                                background: isElected ? 'rgba(74, 222, 128, 0.04)' : undefined,
+                                background: isElected
+                                  ? 'rgba(74, 222, 128, 0.04)'
+                                  : isSecondRound
+                                  ? 'rgba(245, 158, 11, 0.04)'
+                                  : isTie
+                                  ? 'rgba(234, 179, 8, 0.04)'
+                                  : undefined,
                               }}
                             >
                               <td>
@@ -1008,7 +1042,13 @@ export const ResultsPage: React.FC = () => {
                                   style={{
                                     fontWeight: 800,
                                     fontSize: '0.9rem',
-                                    color: isElected ? '#4ade80' : '#94a3b8',
+                                    color: isElected
+                                      ? '#4ade80'
+                                      : isSecondRound
+                                      ? '#fbbf24'
+                                      : isTie
+                                      ? '#facc15'
+                                      : '#94a3b8',
                                   }}
                                 >
                                   {idx + 1}º
@@ -1025,7 +1065,13 @@ export const ResultsPage: React.FC = () => {
                                         height: '28px',
                                         borderRadius: '50%',
                                         objectFit: 'cover',
-                                        border: isElected ? '2px solid #4ade80' : '1px solid #475569',
+                                        border: isElected
+                                          ? '2px solid #4ade80'
+                                          : isSecondRound
+                                          ? '2px solid #fbbf24'
+                                          : isTie
+                                          ? '2px solid #facc15'
+                                          : '1px solid #475569',
                                         flexShrink: 0,
                                       }}
                                     />
@@ -1076,7 +1122,13 @@ export const ResultsPage: React.FC = () => {
                                     style={{
                                       fontSize: '0.85rem',
                                       fontWeight: 700,
-                                      color: isElected ? '#4ade80' : 'white',
+                                      color: isElected
+                                        ? '#4ade80'
+                                        : isSecondRound
+                                        ? '#fbbf24'
+                                        : isTie
+                                        ? '#facc15'
+                                        : 'white',
                                       minWidth: '52px',
                                     }}
                                   >
@@ -1106,6 +1158,40 @@ export const ResultsPage: React.FC = () => {
                                     }}
                                   >
                                     <Award size={13} color="#4ade80" /> ELEITO
+                                  </span>
+                                ) : isSecondRound ? (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      background: 'rgba(245, 158, 11, 0.15)',
+                                      color: '#fbbf24',
+                                      border: '1px solid rgba(245, 158, 11, 0.4)',
+                                      borderRadius: '6px',
+                                      padding: '2px 8px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    2º TURNO
+                                  </span>
+                                ) : isTie ? (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      background: 'rgba(234, 179, 8, 0.15)',
+                                      color: '#facc15',
+                                      border: '1px solid rgba(234, 179, 8, 0.4)',
+                                      borderRadius: '6px',
+                                      padding: '2px 8px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    EMPATE
                                   </span>
                                 ) : (
                                   <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>

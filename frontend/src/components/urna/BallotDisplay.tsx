@@ -7,6 +7,7 @@ interface BallotDisplayProps {
   positionName: string;
   slot: number;
   slots: number;
+  choicesPerVoter?: number;
   digitCount: number;
   digits: string[];
   isBlank: boolean;
@@ -20,6 +21,7 @@ export const BallotDisplay: React.FC<BallotDisplayProps> = ({
   positionName,
   slot,
   slots,
+  choicesPerVoter,
   digitCount,
   digits,
   isBlank,
@@ -67,9 +69,9 @@ export const BallotDisplay: React.FC<BallotDisplayProps> = ({
       {/* Rótulo do cargo */}
       <div className="urna-position-label">SEU VOTO PARA</div>
       <div className="urna-position-name">{positionName}</div>
-      {slots > 1 && (
+      {(choicesPerVoter !== undefined ? choicesPerVoter > 1 : slots > 1) && (
         <div className="urna-slot-label">
-          VAGA {slot} DE {slots}
+          VAGA {slot} DE {choicesPerVoter ?? slots}
         </div>
       )}
 

@@ -12,7 +12,7 @@ export const CandidatesPage: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [states, setStates] = useState<State[]>([]);
   const [availableParties, setAvailableParties] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -24,7 +24,7 @@ export const CandidatesPage: React.FC = () => {
   const [filterSearch, setFilterSearch] = useState('');
 
   // Formulário Novo Candidato
-  const [formElectionId, setFormElectionId] = useState('');
+  const [formElectionId, setFormElectionId] = useState(selectedElectionId);
   const [formPositionId, setFormPositionId] = useState('');
   const [formStateId, setFormStateId] = useState('');
   const [formName, setFormName] = useState('');
@@ -61,10 +61,7 @@ export const CandidatesPage: React.FC = () => {
         setElections(elecs);
         setPositions(pos);
         setStates(sts);
-        if (elecs.length > 0 && !selectedElectionId) {
-          setSearchParams({ electionId: elecs[0].id });
-          setFormElectionId(elecs[0].id);
-        } else if (selectedElectionId) {
+        if (selectedElectionId) {
           setFormElectionId(selectedElectionId);
         }
         if (pos.length > 0) {
@@ -76,17 +73,26 @@ export const CandidatesPage: React.FC = () => {
   }, []);
 
   const fetchParties = () => {
+    if (!selectedElectionId) {
+      setAvailableParties([]);
+      return;
+    }
     candidatesApi
-      .getParties(selectedElectionId || undefined)
+      .getParties(selectedElectionId)
       .then(setAvailableParties)
       .catch(() => {});
   };
 
   const fetchCandidates = () => {
+    if (!selectedElectionId) {
+      setCandidates([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     candidatesApi
       .getAll({
-        electionId: selectedElectionId || undefined,
+        electionId: selectedElectionId,
         positionId: filterPositionId || undefined,
         stateId: filterStateId || undefined,
         party: filterParty || undefined,
@@ -291,8 +297,9 @@ export const CandidatesPage: React.FC = () => {
           <select
             value={selectedElectionId}
             onChange={(e) => {
-              setSearchParams({ electionId: e.target.value });
-              setFormElectionId(e.target.value);
+              const val = e.target.value;
+              setSearchParams(val ? { electionId: val } : {});
+              setFormElectionId(val);
             }}
             style={{
               width: '100%',
@@ -304,6 +311,7 @@ export const CandidatesPage: React.FC = () => {
               fontSize: '0.85rem',
             }}
           >
+            <option value="">Selecione uma eleição...</option>
             {elections.map((elec) => (
               <option key={elec.id} value={elec.id}>
                 {elec.name} ({elec.year})
@@ -432,6 +440,15 @@ export const CandidatesPage: React.FC = () => {
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
                     Carregando candidatos...
+                  </td>
+                </tr>
+              ) : !selectedElectionId ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0' }}>Nenhuma eleição selecionada</span>
+                      <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Selecione uma eleição no filtro acima para visualizar e gerenciar os candidatos.</span>
+                    </div>
                   </td>
                 </tr>
               ) : candidates.length === 0 ? (
@@ -601,6 +618,11 @@ export const CandidatesPage: React.FC = () => {
           {loading ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
               Carregando candidatos...
+            </div>
+          ) : !selectedElectionId ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '4px' }}>Nenhuma eleição selecionada</div>
+              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Selecione uma eleição no filtro acima para visualizar os candidatos.</div>
             </div>
           ) : candidates.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>

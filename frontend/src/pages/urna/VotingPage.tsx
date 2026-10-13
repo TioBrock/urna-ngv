@@ -40,6 +40,7 @@ export const VotingPage: React.FC = () => {
             positionName={currentPosition.name}
             slot={currentSlot}
             slots={currentPosition.slots}
+            choicesPerVoter={currentPosition.choicesPerVoter ?? 1}
             digitCount={currentPosition.digitCount}
             digits={digits}
             isBlank={isBlank}
