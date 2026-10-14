@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../utils/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { auditService } from '../services/auditService';
@@ -107,6 +108,19 @@ positionsRouter.put('/base/:id', requireAuth, async (req: AuthRequest, res: Resp
       ...(isNational !== undefined ? { isNational } : {}),
     },
   });
+
+  // Se alterou defaultSlots, sincroniza com election_positions de eleições em DRAFT
+  if (result.data.defaultSlots !== undefined) {
+    await prisma.electionPosition.updateMany({
+      where: {
+        positionId: req.params.id,
+        election: { status: 'DRAFT' },
+      },
+      data: {
+        slots: result.data.defaultSlots,
+      },
+    });
+  }
 
   await auditService.log({
     eventType: 'POSITION_UPDATED',
@@ -273,11 +287,17 @@ positionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
     res.status(404).json({ error: 'Cargo não encontrado' });
     return;
   }
+  const { stateConfigurations, ...positionData } = result.data;
+
   if (existing.election.status === 'OPEN' || existing.election.status === 'CLOSED') {
-    throw new AppError('Não é possível alterar cargos de uma eleição aberta ou encerrada', 409);
+    // Permite alterar parâmetros de apuração e vagas (slots, hasSecondRound, choicesPerVoter, votingSystem).
+    // Bloqueia alterar apenas quantidade de dígitos se já houver votos registrados.
+    const voteCount = await prisma.vote.count({ where: { electionPositionId: req.params.id } });
+    if (voteCount > 0 && positionData.digitCount !== undefined && positionData.digitCount !== existing.digitCount) {
+      throw new AppError('Não é possível alterar a quantidade de dígitos de um cargo com votos já registrados.', 409);
+    }
   }
 
-  const { stateConfigurations, ...positionData } = result.data;
   const targetSlots = positionData.slots ?? existing.slots;
   const targetVotingSystem = positionData.votingSystem ?? existing.votingSystem;
   const targetHasSecondRound = positionData.hasSecondRound ?? existing.hasSecondRound;
@@ -307,6 +327,12 @@ positionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
           })),
         });
       }
+    } else if (positionData.slots !== undefined && targetDistType !== 'TOTAL_DISTRIBUIDO') {
+      // Se não enviou stateConfigurations específicas e o total de vagas mudou, mantém slots dos estados alinhados
+      await tx.electionPositionState.updateMany({
+        where: { electionPositionId: req.params.id },
+        data: { slots: positionData.slots },
+      });
     }
 
     return tx.electionPosition.update({
@@ -318,6 +344,14 @@ positionsRouter.put('/:id', requireAuth, async (req: AuthRequest, res: Response)
       },
     });
   });
+
+  // Se a eleição estava encerrada, limpa snapshot para garantir recálculo imediato com as novas vagas
+  if (existing.election.status === 'CLOSED') {
+    await prisma.election.update({
+      where: { id: existing.electionId },
+      data: { finalResults: Prisma.DbNull },
+    });
+  }
 
   await auditService.log({
     eventType: 'POSITION_UPDATED',

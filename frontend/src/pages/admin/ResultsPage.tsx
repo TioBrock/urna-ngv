@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { resultsApi, electionsApi, statesApi } from '../../services/api';
 import { Election, State, ElectionResult, ResultsOverview } from '../../types';
-import { Award, Printer, RefreshCw, MapPin, Users, Vote, PieChart as PieIcon, CheckCircle2, Download, ChevronDown, ChevronUp, Layers, Eye, X, FileText } from 'lucide-react';
+import { Award, Printer, RefreshCw, MapPin, Users, Vote, PieChart as PieIcon, CheckCircle2, Download, Layers, Eye, X, FileText } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
 
@@ -47,7 +47,9 @@ const BoletimUrnaDocument: React.FC<{
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div className="bu-meta-item">
             <span className="bu-meta-label">Eleição:</span>
-            <span className="bu-meta-value">{election?.name || 'Eleição'} ({election?.year || new Date().getFullYear()})</span>
+            <span className="bu-meta-value">
+              {election?.name || 'Eleição'} ({election?.year || new Date().getFullYear()}) — {election?.round === 2 ? '2º TURNO' : '1º TURNO'}
+            </span>
           </div>
           <div className="bu-meta-item">
             <span className="bu-meta-label">Situação do Pleito:</span>
@@ -319,12 +321,7 @@ export const ResultsPage: React.FC = () => {
     results: ElectionResult[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedSlots, setExpandedSlots] = useState<Record<string, boolean>>({});
   const [showBuPreview, setShowBuPreview] = useState(false);
-
-  const toggleSlotDetails = (positionId: string) => {
-    setExpandedSlots((prev) => ({ ...prev, [positionId]: !prev[positionId] }));
-  };
 
   useEffect(() => {
     Promise.all([electionsApi.getAll(), statesApi.getActive()])
@@ -401,7 +398,24 @@ export const ResultsPage: React.FC = () => {
       {/* Topo com controles */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>Apuração Oficial & Resultados</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white' }}>Apuração Oficial & Resultados</h1>
+            {currentElec && (
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: currentElec.round === 2 ? '#3b82f6' : '#10b981',
+                  color: 'white',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                {currentElec.round === 2 ? '2º TURNO' : '1º TURNO'}
+              </span>
+            )}
+          </div>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
             Totalização e Boletim de Urna dos cargos e candidatos — Regra Oficial de Votos Válidos
           </p>
@@ -479,7 +493,7 @@ export const ResultsPage: React.FC = () => {
           >
             {elections.map((elec) => (
               <option key={elec.id} value={elec.id}>
-                {elec.name} ({elec.year}) — {elec.status}
+                {elec.name} ({elec.year}) — {elec.round === 2 ? '2º TURNO' : '1º TURNO'} — {elec.status}
               </option>
             ))}
           </select>
@@ -651,14 +665,16 @@ export const ResultsPage: React.FC = () => {
         </div>
       ) : (
         resultsData.results.map((res) => {
-          // Dados para o Gráfico de Círculo Consolidado (apenas candidatos válidos)
-          const pieData = res.candidates.map((c) => ({
-            name: `${c.candidate.electoralName} (${c.candidate.party})`,
-            number: c.candidate.number,
-            party: c.candidate.party,
-            votes: c.votes,
-            percentage: c.percentage,
-          }));
+          // Dados para o Gráfico de Círculo Consolidado (apenas candidatos com votos computados)
+          const pieData = res.candidates
+            .filter((c) => c.votes > 0)
+            .map((c) => ({
+              name: `${c.candidate.electoralName} (${c.candidate.party})`,
+              number: c.candidate.number,
+              party: c.candidate.party,
+              votes: c.votes,
+              percentage: c.percentage,
+            }));
 
           const isMultiSlot = res.electionPosition.slots > 1;
 
@@ -897,68 +913,87 @@ export const ResultsPage: React.FC = () => {
                     </div>
 
                     <div style={{ width: '100%', height: '220px', position: 'relative' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            dataKey="votes"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={55}
-                            outerRadius={85}
-                            paddingAngle={3}
-                          >
-                            {pieData.map((_, index) => (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={CHART_COLORS[index % CHART_COLORS.length]}
+                      {pieData.length > 0 ? (
+                        <>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={pieData}
+                                dataKey="votes"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={55}
+                                outerRadius={85}
+                                paddingAngle={3}
+                              >
+                                {pieData.map((_, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={CHART_COLORS[index % CHART_COLORS.length]}
+                                  />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    const data = payload[0].payload;
+                                    return (
+                                      <div
+                                        style={{
+                                          background: '#0f172a',
+                                          border: '1px solid #334155',
+                                          borderRadius: '6px',
+                                          padding: '0.5rem 0.75rem',
+                                          fontSize: '0.75rem',
+                                          color: 'white',
+                                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: 700 }}>{data.name}</div>
+                                        <div style={{ color: '#4ade80', marginTop: '2px' }}>
+                                          {data.votes} votos ({data.percentage}%)
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
                               />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            content={({ active, payload }) => {
-                              if (active && payload && payload.length) {
-                                const data = payload[0].payload;
-                                return (
-                                  <div
-                                    style={{
-                                      background: '#0f172a',
-                                      border: '1px solid #334155',
-                                      borderRadius: '6px',
-                                      padding: '0.5rem 0.75rem',
-                                      fontSize: '0.75rem',
-                                      color: 'white',
-                                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
-                                    }}
-                                  >
-                                    <div style={{ fontWeight: 700 }}>{data.name}</div>
-                                    <div style={{ color: '#4ade80', marginTop: '2px' }}>
-                                      {data.votes} votos ({data.percentage}%)
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
+                            </PieChart>
+                          </ResponsiveContainer>
 
-                      {/* Centro do donut */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          transform: 'translate(-50%, -50%)',
-                          textAlign: 'center',
-                          pointerEvents: 'none',
-                        }}
-                      >
-                        <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>VÁLIDOS</span>
-                        <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{res.validVotes}</strong>
-                      </div>
+                          {/* Centro do donut */}
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              textAlign: 'center',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>VÁLIDOS</span>
+                            <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{res.validVotes}</strong>
+                          </div>
+                        </>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100%',
+                            color: '#64748b',
+                            fontSize: '0.85rem',
+                            textAlign: 'center',
+                            padding: '1rem',
+                          }}
+                        >
+                          Nenhum voto computado para este cargo até o momento
+                        </div>
+                      )}
                     </div>
 
                     {/* Legenda compacta do gráfico */}
@@ -1208,96 +1243,7 @@ export const ResultsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* ── AUDITORIA INDIVIDUAL POR VAGA (SE MULTI-VAGAS) ── */}
-              {isMultiSlot && (
-                <div style={{ marginTop: '1.25rem', borderTop: '1px solid #1e293b', paddingTop: '1rem' }}>
-                  <button
-                    onClick={() => toggleSlotDetails(res.electionPosition.id)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      color: '#94a3b8',
-                      borderRadius: '6px',
-                      padding: '0.45rem 0.85rem',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <Layers size={14} color="#60a5fa" />
-                    {expandedSlots[res.electionPosition.id]
-                      ? 'Ocultar detalhamento por vaga individual'
-                      : `Ver auditoria por vaga de votação (Vagas 1 a ${res.electionPosition.slots})`}
-                    {expandedSlots[res.electionPosition.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
 
-                  {expandedSlots[res.electionPosition.id] && (
-                    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {res.slots.map((s) => (
-                        <div
-                          key={s.slot}
-                          style={{
-                            background: '#0a0f1d',
-                            border: '1px solid #1e293b',
-                            borderRadius: '8px',
-                            padding: '1rem',
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginBottom: '0.75rem',
-                              flexWrap: 'wrap',
-                              gap: '0.5rem',
-                            }}
-                          >
-                            <strong style={{ fontSize: '0.85rem', color: '#60a5fa' }}>
-                              Cédula / Vaga {s.slot} de {res.electionPosition.slots}
-                            </strong>
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                              Total nesta vaga: <strong>{s.totalVotes}</strong> | Válidos: <strong style={{ color: '#4ade80' }}>{s.validVotes}</strong> | Brancos: {s.blank} | Nulos: {s.null}
-                            </span>
-                          </div>
-
-                          {s.candidates.length === 0 ? (
-                            <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
-                              Nenhum voto nominal registrado para a vaga {s.slot}.
-                            </p>
-                          ) : (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                              {s.candidates.map((sc) => (
-                                <div
-                                  key={sc.candidate.id}
-                                  style={{
-                                    background: '#1e293b',
-                                    borderRadius: '6px',
-                                    padding: '0.4rem 0.75rem',
-                                    fontSize: '0.75rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                  }}
-                                >
-                                  <span style={{ color: 'white', fontWeight: 600 }}>{sc.candidate.electoralName}</span>
-                                  <span style={{ color: '#60a5fa' }}>({sc.candidate.number})</span>
-                                  <strong style={{ color: '#4ade80' }}>{sc.votes} votos</strong>
-                                  <span style={{ color: '#94a3b8' }}>({sc.percentage}%)</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           );
         })

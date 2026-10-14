@@ -178,13 +178,43 @@ candidatesRouter.post(
       res.status(404).json({ error: 'Cargo selecionado não encontrado' });
       return;
     }
+
+    // Valida se o cargo está habilitado para esta eleição
+    const electionPosition = await prisma.electionPosition.findUnique({
+      where: {
+        electionId_positionId: {
+          electionId: result.data.electionId,
+          positionId: result.data.positionId,
+        },
+      },
+      include: { positionStates: true },
+    });
+
+    if (!electionPosition || !electionPosition.isActive) {
+      if (req.file) await fs.unlink(req.file.path).catch(() => {});
+      res.status(400).json({ error: 'Este cargo não faz parte das disputas habilitadas para esta eleição.' });
+      return;
+    }
+
     const isPositionNational =
+      electionPosition.isNational ||
       position.scope === 'NACIONAL' ||
       position.isNational ||
       ['Presidente', 'Vice-Presidente'].includes(position.name ?? '');
 
     const rawStateId = result.data.stateId;
     const stateId = rawStateId && rawStateId.trim() !== '' ? rawStateId : null;
+
+    // Se for cargo estadual, valida se o estado participa da disputa
+    if (!isPositionNational && stateId && electionPosition.positionStates && electionPosition.positionStates.length > 0) {
+      const isStateConfigured = electionPosition.positionStates.some((ps) => ps.stateId === stateId);
+      if (!isStateConfigured) {
+        if (req.file) await fs.unlink(req.file.path).catch(() => {});
+        res.status(400).json({ error: 'Este estado não possui disputa habilitada para este cargo nesta eleição.' });
+        return;
+      }
+    }
+
     // Candidaturas a cargos nacionais são SEMPRE nacionais (votáveis em todos os estados)
     const isNational = isPositionNational ? true : (stateId ? false : (result.data.isNational ?? false));
 

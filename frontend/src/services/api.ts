@@ -14,6 +14,7 @@ import {
   AuditLog,
   DashboardData,
   AdminUser,
+  DisputeConfig,
 } from '../types';
 
 const apiBase = import.meta.env.VITE_API_URL 
@@ -126,7 +127,7 @@ export const electionsApi = {
     const res = await api.get(`/elections/${id}`);
     return res.data;
   },
-  create: async (data: Partial<Election> & { stateIds?: string[] }): Promise<Election> => {
+  create: async (data: Partial<Election> & { stateIds?: string[]; disputes?: DisputeConfig }): Promise<Election> => {
     const res = await api.post('/elections', data);
     return res.data;
   },
@@ -210,6 +211,7 @@ export const positionsApi = {
       votingSystem: string;
       hasSecondRound: boolean;
       distributionType: string;
+      stateConfigurations: { stateId: string; slots: number; hasSecondRound: boolean }[];
     }>
   ): Promise<ElectionPosition> => {
     const res = await api.put(`/positions/${id}`, data);

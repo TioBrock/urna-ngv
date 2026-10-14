@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { electionsApi, statesApi } from '../../services/api';
-import { Election, State, ElectionStatus } from '../../types';
-import { Plus, Play, Pause, Square, Trash2, Settings } from 'lucide-react';
+import { electionsApi, statesApi, positionsApi } from '../../services/api';
+import { Election, State, Position, ElectionStatus } from '../../types';
+import { Plus, Play, Pause, Square, Trash2, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const ElectionsPage: React.FC = () => {
   const [elections, setElections] = useState<Election[]>([]);
   const [states, setStates] = useState<State[]>([]);
+  const [basePositions, setBasePositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
@@ -15,17 +16,24 @@ export const ElectionsPage: React.FC = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
+  const [round, setRound] = useState<1 | 2>(1);
   const [showResultsDuringVoting, setShowResultsDuringVoting] = useState(false);
   const [validateIp, setValidateIp] = useState(true);
   const [selectedStateIds, setSelectedStateIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // 2º Turno Disputas
+  const [nationalDisputeIds, setNationalDisputeIds] = useState<string[]>([]);
+  const [stateDisputes, setStateDisputes] = useState<Record<string, string[]>>({});
+  const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
+
   const fetchElections = () => {
     setLoading(true);
-    Promise.all([electionsApi.getAll(), statesApi.getActive()])
-      .then(([elecs, sts]) => {
+    Promise.all([electionsApi.getAll(), statesApi.getActive(), positionsApi.getBasePositions()])
+      .then(([elecs, sts, bPositions]) => {
         setElections(elecs);
         setStates(sts);
+        setBasePositions(bPositions);
         setSelectedStateIds(sts.map((s) => s.id)); // Padrão: todos os estados
       })
       .catch(() => toast.error('Erro ao listar eleições'))
@@ -36,16 +44,84 @@ export const ElectionsPage: React.FC = () => {
     fetchElections();
   }, []);
 
+  const nationalPositions = basePositions.filter(
+    (p) => p.scope === 'NACIONAL' || p.isNational || ['Presidente', 'Vice-Presidente'].includes(p.name)
+  );
+  const statePositions = basePositions.filter(
+    (p) => !nationalPositions.some((np) => np.id === p.id)
+  );
+
+  const toggleNationalDispute = (posId: string) => {
+    setNationalDisputeIds((prev) =>
+      prev.includes(posId) ? prev.filter((id) => id !== posId) : [...prev, posId]
+    );
+  };
+
+  const toggleStateDispute = (posId: string, stateId: string) => {
+    setStateDisputes((prev) => {
+      const current = prev[posId] || [];
+      const updated = current.includes(stateId)
+        ? current.filter((id) => id !== stateId)
+        : [...current, stateId];
+      return { ...prev, [posId]: updated };
+    });
+  };
+
+  const selectAllStatesForPosition = (posId: string) => {
+    setStateDisputes((prev) => ({
+      ...prev,
+      [posId]: states.map((s) => s.id),
+    }));
+  };
+
+  const clearStatesForPosition = (posId: string) => {
+    setStateDisputes((prev) => ({
+      ...prev,
+      [posId]: [],
+    }));
+  };
+
+  const selectAllDisputes = () => {
+    setNationalDisputeIds(nationalPositions.map((p) => p.id));
+    const allSt: Record<string, string[]> = {};
+    for (const p of statePositions) {
+      allSt[p.id] = states.map((s) => s.id);
+    }
+    setStateDisputes(allSt);
+  };
+
+  const clearAllDisputes = () => {
+    setNationalDisputeIds([]);
+    setStateDisputes({});
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error('Informe o nome da eleição');
       return;
     }
-    if (selectedStateIds.length === 0) {
+
+    if (round === 2) {
+      const hasNational = nationalDisputeIds.length > 0;
+      const hasState = Object.values(stateDisputes).some((stList) => stList.length > 0);
+      if (!hasNational && !hasState) {
+        toast.error('Uma eleição de 2º turno deve ter pelo menos uma disputa configurada (cargo nacional ou ao menos um estado com disputa estadual).');
+        return;
+      }
+    } else if (selectedStateIds.length === 0) {
       toast.error('Selecione pelo menos um estado participante');
       return;
     }
+
+    const disputesPayload = round === 2
+      ? {
+          nationalPositionIds: nationalDisputeIds,
+          stateDisputes: Object.entries(stateDisputes)
+            .filter(([_, sIds]) => sIds.length > 0)
+            .map(([positionId, stateIds]) => ({ positionId, stateIds })),
+        }
+      : undefined;
 
     setSubmitting(true);
     try {
@@ -53,15 +129,20 @@ export const ElectionsPage: React.FC = () => {
         name: name.trim(),
         description: description.trim() || undefined,
         year: Number(year),
+        round,
         showResultsDuringVoting,
         validateIp,
         stateIds: selectedStateIds,
+        disputes: disputesPayload,
       });
 
-      toast.success('Eleição criada com sucesso!');
+      toast.success(round === 2 ? 'Eleição de 2º Turno criada com sucesso!' : 'Eleição criada com sucesso!');
       setShowModal(false);
       setName('');
       setDescription('');
+      setRound(1);
+      setNationalDisputeIds([]);
+      setStateDisputes({});
       fetchElections();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erro ao criar eleição');
@@ -199,7 +280,18 @@ export const ElectionsPage: React.FC = () => {
                 elections.map((elec) => (
                   <tr key={elec.id}>
                     <td>
-                      <strong style={{ color: 'white', display: 'block' }}>{elec.name}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px', flexWrap: 'wrap' }}>
+                        <strong style={{ color: 'white' }}>{elec.name}</strong>
+                        {elec.round === 2 ? (
+                          <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 800, background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                            2º TURNO
+                          </span>
+                        ) : (
+                          <span style={{ padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 800, background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                            1º TURNO
+                          </span>
+                        )}
+                      </div>
                       {elec.description && (
                         <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{elec.description}</span>
                       )}
@@ -341,7 +433,18 @@ export const ElectionsPage: React.FC = () => {
               <div key={elec.id} className="admin-mobile-card">
                 <div className="admin-mobile-card-header">
                   <div>
-                    <strong style={{ color: 'white', fontSize: '1rem', display: 'block' }}>{elec.name}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '2px', flexWrap: 'wrap' }}>
+                      <strong style={{ color: 'white', fontSize: '1rem' }}>{elec.name}</strong>
+                      {elec.round === 2 ? (
+                        <span style={{ padding: '0.12rem 0.45rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                          2º TURNO
+                        </span>
+                      ) : (
+                        <span style={{ padding: '0.12rem 0.45rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                          1º TURNO
+                        </span>
+                      )}
+                    </div>
                     {elec.description && (
                       <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{elec.description}</span>
                     )}
@@ -536,13 +639,72 @@ export const ElectionsPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Seleção Explícita de Turno */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '6px' }}>
+                  TURNO DA ELEIÇÃO *
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRound(1);
+                      if (name.includes('2º Turno')) setName(name.replace('2º Turno', '1º Turno'));
+                    }}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: `2px solid ${round === 1 ? '#3b82f6' : '#334155'}`,
+                      background: round === 1 ? 'rgba(59, 130, 246, 0.15)' : '#0f172a',
+                      color: round === 1 ? '#60a5fa' : '#94a3b8',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <span>1º Turno</span>
+                    <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: '#334155', color: '#cbd5e1' }}>Padrão</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRound(2);
+                      if (name.includes('1º Turno')) setName(name.replace('1º Turno', '2º Turno'));
+                      else if (!name.includes('2º Turno')) setName(name ? `${name} - 2º Turno` : 'Eleições Gerais - 2º Turno');
+                    }}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: `2px solid ${round === 2 ? '#f59e0b' : '#334155'}`,
+                      background: round === 2 ? 'rgba(245, 158, 11, 0.15)' : '#0f172a',
+                      color: round === 2 ? '#fbbf24' : '#94a3b8',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <span>2º Turno</span>
+                    <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24' }}>Disputa Seletiva</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '4px' }}>
                   NOME DA ELEIÇÃO *
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Eleições Gerais 2026 - 1º Turno"
+                  placeholder={round === 2 ? 'Ex: Eleições Gerais 2026 - 2º Turno' : 'Ex: Eleições Gerais 2026 - 1º Turno'}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -563,7 +725,7 @@ export const ElectionsPage: React.FC = () => {
                   DESCRIÇÃO / OBSERVAÇÕES
                 </label>
                 <textarea
-                  placeholder="Ex: Eleição geral do RPG para Presidente, Governadores e Senadores"
+                  placeholder="Ex: Pleito eleitoral do RPG para cargos e estados configurados"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
@@ -628,61 +790,243 @@ export const ElectionsPage: React.FC = () => {
                 </label>
               </div>
 
-              {/* Estados Participantes */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
-                    ESTADOS PARTICIPANTES ({selectedStateIds.length}/{states.length})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={toggleSelectAllStates}
-                    style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: '0.75rem', cursor: 'pointer' }}
-                  >
-                    {selectedStateIds.length === states.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
-                  </button>
-                </div>
-
+              {/* SELEÇÃO DE DISPUTAS PARA O 2º TURNO */}
+              {round === 2 ? (
                 <div
                   style={{
-                    maxHeight: '130px',
-                    overflowY: 'auto',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    padding: '0.5rem',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-                    gap: '0.35rem',
+                    background: '#0a0f1d',
+                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                    borderRadius: '12px',
+                    padding: '1.1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem',
                   }}
                 >
-                  {states.map((st) => {
-                    const isSelected = selectedStateIds.includes(st.id);
-                    return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.6rem' }}>
+                    <div>
+                      <h3 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#fbbf24', margin: 0 }}>
+                        Configuração de Disputas do 2º Turno
+                      </h3>
+                      <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '2px 0 0 0' }}>
+                        Selecione quais cargos e estados participarão deste 2º turno.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
                       <button
                         type="button"
-                        key={st.id}
-                        onClick={() => {
-                          setSelectedStateIds((prev) =>
-                            prev.includes(st.id) ? prev.filter((id) => id !== st.id) : [...prev, st.id]
-                          );
-                        }}
-                        style={{
-                          padding: '0.3rem 0.4rem',
-                          background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
-                          border: `1px solid ${isSelected ? '#3b82f6' : '#334155'}`,
-                          borderRadius: '4px',
-                          color: isSelected ? 'white' : '#94a3b8',
-                          fontSize: '0.75rem',
-                          cursor: 'pointer',
-                        }}
+                        onClick={selectAllDisputes}
+                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', background: '#1e293b', color: '#60a5fa', border: '1px solid #334155', borderRadius: '4px', cursor: 'pointer' }}
                       >
-                        {st.abbreviation}
+                        Selecionar Todas
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        onClick={clearAllDisputes}
+                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        Limpar Seleção
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cargos Nacionais */}
+                  {nationalPositions.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase' }}>
+                        Cargos Nacionais (Votação em todo o país)
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        {nationalPositions.map((pos) => {
+                          const isChecked = nationalDisputeIds.includes(pos.id);
+                          return (
+                            <label
+                              key={pos.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '0.55rem 0.75rem',
+                                background: isChecked ? 'rgba(59, 130, 246, 0.15)' : '#1e293b',
+                                border: `1px solid ${isChecked ? '#3b82f6' : '#334155'}`,
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => toggleNationalDispute(pos.id)}
+                                  style={{ width: '16px', height: '16px' }}
+                                />
+                                <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'white' }}>{pos.name}</span>
+                              </div>
+                              <span style={{ fontSize: '0.68rem', padding: '0.15rem 0.5rem', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', borderRadius: '4px', fontWeight: 700 }}>
+                                NACIONAL
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cargos Estaduais com seleção seletiva */}
+                  {statePositions.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      <span style={{ fontSize: '0.73rem', fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase' }}>
+                        Cargos Estaduais (Seleção Seletiva por Estado)
+                      </span>
+                      {statePositions.map((pos) => {
+                        const selectedStates = stateDisputes[pos.id] || [];
+                        const isExpanded = expandedPositionId === pos.id;
+                        return (
+                          <div
+                            key={pos.id}
+                            style={{
+                              background: '#1e293b',
+                              border: `1px solid ${selectedStates.length > 0 ? '#38bdf8' : '#334155'}`,
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              onClick={() => setExpandedPositionId(isExpanded ? null : pos.id)}
+                              style={{
+                                padding: '0.55rem 0.75rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                cursor: 'pointer',
+                                background: selectedStates.length > 0 ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ color: '#94a3b8' }}>{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
+                                <strong style={{ fontSize: '0.82rem', color: 'white' }}>{pos.name}</strong>
+                                <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', borderRadius: '4px' }}>
+                                  ESTADUAL
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '0.73rem', fontWeight: 700, color: selectedStates.length > 0 ? '#38bdf8' : '#64748b' }}>
+                                {selectedStates.length} de {states.length} estados
+                              </span>
+                            </div>
+
+                            {/* Detalhamento de Estados */}
+                            {isExpanded && (
+                              <div style={{ padding: '0.75rem', borderTop: '1px solid #334155', background: '#0f172a' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                                    Marque os estados onde haverá 2º turno para {pos.name}:
+                                  </span>
+                                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => selectAllStatesForPosition(pos.id)}
+                                      style={{ padding: '0.2rem 0.4rem', fontSize: '0.68rem', background: '#334155', color: '#60a5fa', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                    >
+                                      Todos
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => clearStatesForPosition(pos.id)}
+                                      style={{ padding: '0.2rem 0.4rem', fontSize: '0.68rem', background: '#334155', color: '#94a3b8', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                    >
+                                      Nenhum
+                                    </button>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(65px, 1fr))', gap: '0.3rem' }}>
+                                  {states.map((st) => {
+                                    const isStSelected = selectedStates.includes(st.id);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={st.id}
+                                        onClick={() => toggleStateDispute(pos.id, st.id)}
+                                        style={{
+                                          padding: '0.25rem 0.35rem',
+                                          background: isStSelected ? 'rgba(56, 189, 248, 0.25)' : '#1e293b',
+                                          border: `1px solid ${isStSelected ? '#38bdf8' : '#334155'}`,
+                                          borderRadius: '4px',
+                                          color: isStSelected ? 'white' : '#94a3b8',
+                                          fontSize: '0.72rem',
+                                          cursor: 'pointer',
+                                          fontWeight: isStSelected ? 700 : 400,
+                                        }}
+                                      >
+                                        {st.abbreviation}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
+              ) : (
+                /* Estados Participantes para 1º Turno */
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#cbd5e1' }}>
+                      ESTADOS PARTICIPANTES ({selectedStateIds.length}/{states.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllStates}
+                      style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: '0.75rem', cursor: 'pointer' }}
+                    >
+                      {selectedStateIds.length === states.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      maxHeight: '130px',
+                      overflowY: 'auto',
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      padding: '0.5rem',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                      gap: '0.35rem',
+                    }}
+                  >
+                    {states.map((st) => {
+                      const isSelected = selectedStateIds.includes(st.id);
+                      return (
+                        <button
+                          type="button"
+                          key={st.id}
+                          onClick={() => {
+                            setSelectedStateIds((prev) =>
+                              prev.includes(st.id) ? prev.filter((id) => id !== st.id) : [...prev, st.id]
+                            );
+                          }}
+                          style={{
+                            padding: '0.3rem 0.4rem',
+                            background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+                            border: `1px solid ${isSelected ? '#3b82f6' : '#334155'}`,
+                            borderRadius: '4px',
+                            color: isSelected ? 'white' : '#94a3b8',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {st.abbreviation}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button

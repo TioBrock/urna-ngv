@@ -12,7 +12,10 @@ async function getElectionWithAccess(electionId: string, adminAccess: boolean) {
       electionPositions: {
         where: { isActive: true },
         orderBy: { order: 'asc' },
-        include: { position: true },
+        include: {
+          position: true,
+          positionStates: { include: { state: true } },
+        },
       },
     },
   });
@@ -71,7 +74,9 @@ function calculateElectedCandidates(
 
   // 1. SISTEMA MAJORITÁRIO
   if (votingSystem !== 'PROPORCIONAL') {
-    const sorted = [...candidatesList].sort((a, b) => b.votes - a.votes);
+    const sorted = [...candidatesList].sort(
+      (a, b) => b.votes - a.votes || a.candidate.number.localeCompare(b.candidate.number, undefined, { numeric: true })
+    );
 
     // CASO A: Eleição de 1º Turno com Segundo Turno configurado
     if (round === 1 && hasSecondRound) {
@@ -298,12 +303,11 @@ function calculateElectedCandidates(
 
       for (const p of partyList) {
         if (p.votes <= 0) continue;
+        // Limitar vagas por partido ao número de candidatos com votos E ao máximo global de slots
         const candidatesInPartyWithVotes = candidatesList.filter(
           (c) => (c.candidate.party || 'SEM PARTIDO').trim().toUpperCase() === p.party && c.votes > 0
         ).length;
-
-        // Se o partido já preencheu todos os seus candidatos que receberam votos, não recebe mais vagas
-        if (p.totalSeats >= candidatesInPartyWithVotes) continue;
+        if (p.totalSeats >= Math.min(candidatesInPartyWithVotes, slots)) continue;
 
         const avg = p.votes / (p.totalSeats + 1);
         if (avg > highestAverage || (avg === highestAverage && bestParty && p.votes > bestParty.votes)) {
@@ -320,17 +324,22 @@ function calculateElectedCandidates(
     }
   }
 
-  // Determinar candidatos eleitos dentro de cada partido
+  // Determinar candidatos eleitos dentro de cada partido (respeitando teto total de vagas)
   const electedCandidateIds = new Set<string>();
   const electedReasonMap = new Map<string, string>();
+  let totalElected = 0;
 
-  for (const p of partyList) {
-    if (p.totalSeats <= 0) continue;
+  // Ordenar partidos por vagas desc para determinismo
+  const partyListSorted = [...partyList].sort((a, b) => b.totalSeats - a.totalSeats || b.votes - a.votes);
+
+  for (const p of partyListSorted) {
+    if (p.totalSeats <= 0 || totalElected >= slots) continue;
     const partyCandidates = candidatesList
       .filter((c) => (c.candidate.party || 'SEM PARTIDO').trim().toUpperCase() === p.party && c.votes > 0)
       .sort((a, b) => b.votes - a.votes);
 
-    for (let i = 0; i < Math.min(p.totalSeats, partyCandidates.length); i++) {
+    const seatsToGive = Math.min(p.totalSeats, partyCandidates.length, slots - totalElected);
+    for (let i = 0; i < seatsToGive; i++) {
       const cand = partyCandidates[i];
       electedCandidateIds.add(cand.candidate.id);
       const isDirect = i < p.directSeats;
@@ -338,10 +347,13 @@ function calculateElectedCandidates(
         cand.candidate.id,
         isDirect ? `Quociente Partidário (${p.party})` : `Média / Sobras (${p.party})`
       );
+      totalElected++;
     }
   }
 
-  const sorted = [...candidatesList].sort((a, b) => b.votes - a.votes);
+  const sorted = [...candidatesList].sort(
+    (a, b) => b.votes - a.votes || a.candidate.number.localeCompare(b.candidate.number, undefined, { numeric: true })
+  );
   const rankedCandidates = sorted.map((c) => {
     const isElected = electedCandidateIds.has(c.candidate.id);
     return {
@@ -426,25 +438,34 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
       const nullVotes = votesByCandidateOverall.filter((v) => v.type === 'NULL').reduce((s, v) => s + v._count._all, 0);
       const validVotes = totalVotes - blank - nullVotes;
 
-      const validCandidateIds = votesByCandidateOverall
-        .filter((v) => v.type === 'VALID' && v.candidateId)
-        .map((v) => v.candidateId!);
-
-      const candidates = validCandidateIds.length
-        ? await prisma.candidate.findMany({
-            where: { id: { in: validCandidateIds } },
-            select: {
-              id: true,
-              name: true,
-              electoralName: true,
-              number: true,
-              party: true,
-              photoUrl: true,
-              stateId: true,
-              isNational: true,
-            },
-          })
-        : [];
+      // Busca todos os candidatos ativos cadastrados para este cargo na eleição
+      const candidates = await prisma.candidate.findMany({
+        where: {
+          electionId: election.id,
+          positionId: ep.positionId,
+          isActive: true,
+          ...(stateId
+            ? {
+                OR: [
+                  { stateId: String(stateId) },
+                  { isNational: true },
+                  { stateId: null },
+                ],
+              }
+            : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          electoralName: true,
+          number: true,
+          party: true,
+          photoUrl: true,
+          stateId: true,
+          isNational: true,
+        },
+        orderBy: [{ number: 'asc' }],
+      });
 
       const candidateResults = candidates
         .map((c) => {
@@ -456,7 +477,10 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
             percentageTotal: totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(2) : '0.00',
           };
         })
-        .sort((a, b) => b.votes - a.votes);
+        .sort((a, b) => {
+          if (b.votes !== a.votes) return b.votes - a.votes;
+          return a.candidate.number.localeCompare(b.candidate.number, undefined, { numeric: true });
+        });
 
       // Determinar eleitos:
       // Se for cargo estadual (isNational === false) e NÃO foi passado filtro de estado:
@@ -465,7 +489,10 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
       let electoralQuotient: number | null = null;
       let partyResults: PartySeats[] = [];
 
-      if (!ep.isNational && !stateId) {
+      // Calcular por estado apenas se distributionType for ESTADUAL ou TOTAL_DISTRIBUIDO.
+      // NACIONAL = pool único de vagas compartilhado entre todos os estados.
+      const usePerStateCalc = !ep.isNational && !stateId && ep.distributionType !== 'NACIONAL';
+      if (usePerStateCalc) {
         // Apuração estado a estado
         const electedSet = new Set<string>();
         const statusMap = new Map<string, 'ELEITO' | '2º TURNO' | 'EMPATE' | 'NÃO ELEITO'>();
@@ -481,14 +508,13 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
           _count: { _all: true },
         });
 
-        const activeStateIds = new Set(votesByCandidateAndState.map((v) => v.stateId));
+        const applicableStates = ep.positionStates && ep.positionStates.length > 0
+          ? electionStates.filter((es) => ep.positionStates.some((ps: any) => ps.stateId === es.stateId))
+          : electionStates;
 
-        for (const es of electionStates) {
-          if (!activeStateIds.has(es.stateId)) continue;
-
+        for (const es of applicableStates) {
           const stateVotes = votesByCandidateAndState.filter((v) => v.stateId === es.stateId);
           const stateValidVotes = stateVotes.reduce((sum, v) => sum + v._count._all, 0);
-          if (stateValidVotes === 0) continue;
 
           const stateCandidateResults = candidates
             .filter((c) => c.stateId === es.stateId || c.isNational || !c.stateId)
@@ -501,17 +527,23 @@ resultsRouter.get('/:electionId', requireAuth, async (req: Request, res: Respons
                 percentageTotal: stateValidVotes > 0 ? ((v / stateValidVotes) * 100).toFixed(2) : '0.00',
               };
             })
-            .filter((c) => c.votes > 0)
-            .sort((a, b) => b.votes - a.votes);
+            .sort((a, b) => {
+              if (b.votes !== a.votes) return b.votes - a.votes;
+              return a.candidate.number.localeCompare(b.candidate.number, undefined, { numeric: true });
+            });
 
           if (stateCandidateResults.length === 0) continue;
+
+          const stateCfg = ep.positionStates?.find((ps: any) => ps.stateId === es.stateId);
+          const stateSlots = stateCfg?.slots ?? ep.slots;
+          const stateHasSecondRound = stateCfg ? stateCfg.hasSecondRound : ep.hasSecondRound;
 
           const stateCalculation = calculateElectedCandidates(
             stateCandidateResults,
             stateValidVotes,
-            ep.slots,
+            stateSlots,
             votingSystem,
-            ep.hasSecondRound,
+            stateHasSecondRound,
             election.round
           );
 
@@ -794,16 +826,33 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
     const nullVotes = votesByCandidateOverall.filter((v) => v.type === 'NULL').reduce((s, v) => s + v._count._all, 0);
     const validVotes = totalVotes - blank - nullVotes;
 
-    const validCandidateIds = votesByCandidateOverall
-      .filter((v) => v.type === 'VALID' && v.candidateId)
-      .map((v) => v.candidateId!);
-
-    const candidates = validCandidateIds.length
-      ? await prisma.candidate.findMany({
-          where: { id: { in: validCandidateIds } },
-          select: { id: true, name: true, electoralName: true, number: true, party: true, stateId: true, isNational: true },
-        })
-      : [];
+    // Busca todos os candidatos ativos cadastrados para este cargo na eleição
+    const candidates = await prisma.candidate.findMany({
+      where: {
+        electionId: election.id,
+        positionId: ep.positionId,
+        isActive: true,
+        ...(stateId
+          ? {
+              OR: [
+                { stateId: String(stateId) },
+                { isNational: true },
+                { stateId: null },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        electoralName: true,
+        number: true,
+        party: true,
+        stateId: true,
+        isNational: true,
+      },
+      orderBy: [{ number: 'asc' }],
+    });
 
     const candidateResults = candidates
       .map((c) => {
@@ -816,11 +865,15 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
           percentageTotal: totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(2) : '0.00',
         };
       })
-      .sort((a, b) => b.votes - a.votes);
+      .sort((a, b) => {
+        if (b.votes !== a.votes) return b.votes - a.votes;
+        return a.candidate.number.localeCompare(b.candidate.number, undefined, { numeric: true });
+      });
 
     let rankedCandidates: Array<any> = [];
 
-    if (!ep.isNational && !stateId) {
+    const usePerStateCalc = !ep.isNational && !stateId && ep.distributionType !== 'NACIONAL';
+    if (usePerStateCalc) {
       const electedSet = new Set<string>();
       const statusMap = new Map<string, 'ELEITO' | '2º TURNO' | 'EMPATE' | 'NÃO ELEITO'>();
       const reasonMap = new Map<string, string>();
@@ -834,13 +887,13 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
         _count: { _all: true },
       });
 
-      const activeStateIds = new Set(votesByCandidateAndState.map((v) => v.stateId));
+      const applicableStates = ep.positionStates && ep.positionStates.length > 0
+        ? electionStates.filter((es) => ep.positionStates.some((ps: any) => ps.stateId === es.stateId))
+        : electionStates;
 
-      for (const es of electionStates) {
-        if (!activeStateIds.has(es.stateId)) continue;
+      for (const es of applicableStates) {
         const stateVotes = votesByCandidateAndState.filter((v) => v.stateId === es.stateId);
         const stateValidVotes = stateVotes.reduce((sum, v) => sum + v._count._all, 0);
-        if (stateValidVotes === 0) continue;
 
         const stateCandidateResults = candidates
           .filter((c) => c.stateId === es.stateId || c.isNational || !c.stateId)
@@ -854,17 +907,23 @@ resultsRouter.get('/:electionId/csv', requireAuth, async (req: Request, res: Res
               percentageTotal: stateValidVotes > 0 ? ((v / stateValidVotes) * 100).toFixed(2) : '0.00',
             };
           })
-          .filter((c) => c.votes > 0)
-          .sort((a, b) => b.votes - a.votes);
+          .sort((a, b) => {
+            if (b.votes !== a.votes) return b.votes - a.votes;
+            return a.candidate.number.localeCompare(b.candidate.number, undefined, { numeric: true });
+          });
 
         if (stateCandidateResults.length === 0) continue;
+
+        const stateCfg = ep.positionStates?.find((ps: any) => ps.stateId === es.stateId);
+        const stateSlots = stateCfg?.slots ?? ep.slots;
+        const stateHasSecondRound = stateCfg ? stateCfg.hasSecondRound : ep.hasSecondRound;
 
         const stateCalculation = calculateElectedCandidates(
           stateCandidateResults,
           stateValidVotes,
-          ep.slots,
+          stateSlots,
           votingSystem,
-          ep.hasSecondRound,
+          stateHasSecondRound,
           election.round
         );
 

@@ -33,6 +33,9 @@ export const ElectionDetailPage: React.FC = () => {
   const [editPosIsNational, setEditPosIsNational] = useState(false);
   const [editPosVotingSystem, setEditPosVotingSystem] = useState<'MAJORITARIO' | 'PROPORCIONAL'>('MAJORITARIO');
   const [editPosHasSecondRound, setEditPosHasSecondRound] = useState(false);
+  const [editPosDistributionType, setEditPosDistributionType] = useState<'NACIONAL' | 'ESTADUAL' | 'TOTAL_DISTRIBUIDO'>('ESTADUAL');
+  // vagas por estado para TOTAL_DISTRIBUIDO: { stateId -> slots }
+  const [editPosStateSlots, setEditPosStateSlots] = useState<Record<string, number>>({});
 
   const fetchDetails = () => {
     if (!id) return;
@@ -111,6 +114,15 @@ export const ElectionDetailPage: React.FC = () => {
     setEditPosIsNational(ep.isNational);
     setEditPosVotingSystem((ep.votingSystem as any) || 'MAJORITARIO');
     setEditPosHasSecondRound(ep.hasSecondRound || false);
+    setEditPosDistributionType((ep.distributionType as any) || 'ESTADUAL');
+    // Popular vagas por estado a partir de positionStates já configurados
+    const slotMap: Record<string, number> = {};
+    if (ep.positionStates && ep.positionStates.length > 0) {
+      for (const ps of ep.positionStates) {
+        slotMap[ps.stateId] = ps.slots ?? 1;
+      }
+    }
+    setEditPosStateSlots(slotMap);
     setShowEditPosModal(true);
   };
 
@@ -128,6 +140,12 @@ export const ElectionDetailPage: React.FC = () => {
         isNational: editPosIsNational,
         votingSystem: editPosVotingSystem,
         hasSecondRound: editPosHasSecondRound,
+        distributionType: editPosDistributionType,
+        stateConfigurations: editPosDistributionType === 'TOTAL_DISTRIBUIDO'
+          ? Object.entries(editPosStateSlots)
+              .filter(([, slots]) => slots > 0)
+              .map(([stateId, slots]) => ({ stateId, slots, hasSecondRound: false }))
+          : undefined,
       });
 
       toast.success('Cargo atualizado com sucesso!');
@@ -200,8 +218,19 @@ export const ElectionDetailPage: React.FC = () => {
       <div className="admin-card" style={{ padding: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{election.name}</h1>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', margin: 0 }}>{election.name}</h1>
+              {election.round === 2 ? (
+                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800, background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                  2º TURNO
+                </span>
+              ) : (
+                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800, background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                  1º TURNO
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '6px' }}>
               Ano: {election.year} • Status atual:{' '}
               <strong style={{ color: election.status === 'OPEN' ? '#4ade80' : '#facc15' }}>
                 {election.status}
@@ -873,6 +902,96 @@ export const ElectionDetailPage: React.FC = () => {
                   </p>
                 </div>
               )}
+
+              {/* Tipo de distribuição das vagas */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#a78bfa', marginBottom: '4px' }}>
+                  DISTRIBUIÇÃO DAS VAGAS
+                </label>
+                <select
+                  value={editPosDistributionType}
+                  onChange={(e) => setEditPosDistributionType(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    color: 'white',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="ESTADUAL">Estadual — cada estado elege suas vagas independentemente</option>
+                  <option value="NACIONAL">Nacional — pool único de vagas compartilhado entre todos os estados</option>
+                  <option value="TOTAL_DISTRIBUIDO">Total Distribuído — vagas divididas entre estados com cotas configuradas</option>
+                </select>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  {editPosDistributionType === 'NACIONAL'
+                    ? 'Todos os votos de todos os estados competem pelo mesmo conjunto de vagas.'
+                    : editPosDistributionType === 'TOTAL_DISTRIBUIDO'
+                    ? 'Cada estado tem uma cota de vagas definida individualmente.'
+                    : 'Cada estado elege seus representantes de forma independente com base em suas vagas.'}
+                </span>
+              </div>
+
+              {/* Configuração de vagas por estado (apenas para TOTAL_DISTRIBUIDO) */}
+              {editPosDistributionType === 'TOTAL_DISTRIBUIDO' && (() => {
+                const states = election?.electionStates?.map((es) => es.state) ?? [];
+                const sumSlots = states.reduce((acc, s) => acc + (editPosStateSlots[s.id] ?? 0), 0);
+                const isValid = sumSlots === Number(editPosSlots);
+                return (
+                  <div
+                    style={{
+                      background: '#0a0f1d',
+                      border: `1px solid ${isValid ? 'rgba(167,139,250,0.3)' : 'rgba(239,68,68,0.4)'}`,
+                      borderRadius: '8px',
+                      padding: '1rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a78bfa' }}>VAGAS POR ESTADO</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isValid ? '#4ade80' : '#f87171' }}>
+                        Soma: {sumSlots} / {editPosSlots} vagas
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.5rem' }}>
+                      {states.length === 0 && (
+                        <p style={{ color: '#64748b', fontSize: '0.8rem', gridColumn: '1/-1' }}>
+                          Nenhum estado configurado nesta eleição.
+                        </p>
+                      )}
+                      {states.map((state) => (
+                        <div key={state.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#1e293b', borderRadius: '6px', padding: '0.4rem 0.6rem' }}>
+                          <span style={{ flex: 1, fontSize: '0.82rem', color: '#cbd5e1', fontWeight: 600 }}>{state.abbreviation}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={Number(editPosSlots)}
+                            value={editPosStateSlots[state.id] ?? 0}
+                            onChange={(e) => setEditPosStateSlots((prev) => ({ ...prev, [state.id]: Number(e.target.value) }))}
+                            style={{
+                              width: '52px',
+                              padding: '0.3rem 0.4rem',
+                              background: '#0f172a',
+                              border: '1px solid #334155',
+                              borderRadius: '4px',
+                              color: 'white',
+                              fontSize: '0.85rem',
+                              textAlign: 'center',
+                            }}
+                          />
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>vagas</span>
+                        </div>
+                      ))}
+                    </div>
+                    {!isValid && (
+                      <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '0.5rem', margin: '0.5rem 0 0 0' }}>
+                        ⚠ A soma das vagas por estado deve ser exatamente igual ao total de vagas do cargo ({editPosSlots}).
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                 <button

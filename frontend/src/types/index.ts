@@ -57,7 +57,9 @@ export interface Election {
   year: number;
   status: ElectionStatus;
   startDate?: string | null;
-  endDate?: string | null;
+  round: number;
+  parentElectionId?: string | null;
+  parentElection?: Election | null;
   showResultsDuringVoting: boolean;
   validateIp?: boolean;
   createdAt: string;
@@ -274,4 +276,12 @@ export interface DashboardData {
     totalVotes: number;
     totalSessions: number;
   };
+}
+
+export interface DisputeConfig {
+  nationalPositionIds: string[];
+  stateDisputes: {
+    positionId: string;
+    stateIds: string[];
+  }[];
 }

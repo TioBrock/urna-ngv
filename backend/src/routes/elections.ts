@@ -303,8 +303,20 @@ electionsRouter.get('/:id/final-results', requireAuth, async (req, res: Response
   });
 });
 
+const disputeSchema = z.object({
+  nationalPositionIds: z.array(z.string().uuid()).default([]),
+  stateDisputes: z
+    .array(
+      z.object({
+        positionId: z.string().uuid(),
+        stateIds: z.array(z.string().uuid()),
+      })
+    )
+    .default([]),
+});
+
 const createElectionSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1, 'Nome da eleição é obrigatório'),
   description: z.string().optional(),
   year: z.number().int().min(1900).max(2100),
   startDate: z.string().optional().nullable().or(z.literal('')),
@@ -316,6 +328,7 @@ const createElectionSchema = z.object({
   // Segundo turno: vincula esta eleição como filha de um 1º turno
   parentElectionId: z.string().uuid().optional().nullable(),
   round: z.number().int().min(1).max(2).default(1),
+  disputes: disputeSchema.optional(),
 });
 
 // POST /api/elections
@@ -326,39 +339,142 @@ electionsRouter.post('/', requireAuth, async (req: AuthRequest, res: Response): 
     return;
   }
 
-  const { stateIds, ...data } = result.data;
+  const { stateIds, disputes, ...data } = result.data;
 
-  // Se for 2º turno, valida que o parentElectionId existe e está CLOSED
+  // Validação estrita para 2º Turno:
+  if (data.round === 2) {
+    const hasNational = disputes && disputes.nationalPositionIds && disputes.nationalPositionIds.length > 0;
+    const hasState =
+      disputes &&
+      disputes.stateDisputes &&
+      disputes.stateDisputes.some((sd) => sd.stateIds && sd.stateIds.length > 0);
+
+    if (!hasNational && !hasState) {
+      throw new AppError(
+        'Uma eleição de 2º turno deve ter pelo menos uma disputa configurada (cargo nacional ou ao menos um estado participante em cargo estadual).',
+        400
+      );
+    }
+  }
+
+  // Se parentElectionId foi fornecido, valida se existe e está CLOSED
   if (data.parentElectionId) {
     const parentElection = await prisma.election.findUnique({ where: { id: data.parentElectionId } });
     if (!parentElection) {
       throw new AppError('Eleição de 1º turno referenciada não encontrada.', 404);
     }
     if (parentElection.status !== 'CLOSED') {
-      throw new AppError('A eleição de 1º turno deve estar encerrada (CLOSED) antes de criar o 2º turno.', 400);
+      throw new AppError('A eleição de 1º turno deve estar encerrada (CLOSED) antes de criar o 2º turno vinculado.', 400);
     }
   }
 
-  const election = await prisma.election.create({
-    data: {
-      ...data,
-      startDate: data.startDate && data.startDate.trim() !== '' ? new Date(data.startDate) : undefined,
-      endDate: data.endDate && data.endDate.trim() !== '' ? new Date(data.endDate) : undefined,
-      electionStates: stateIds?.length
-        ? { create: stateIds.map((stateId) => ({ stateId })) }
-        : undefined,
-    },
-    include: { electionStates: { include: { state: true } } },
+  // Determinar quais estados participam desta eleição
+  let effectiveStateIds = stateIds ?? [];
+  if (data.round === 2 && disputes) {
+    if (disputes.nationalPositionIds && disputes.nationalPositionIds.length > 0) {
+      // Se há cargo nacional, usa todos os estados selecionados ou todos os ativos
+      if (effectiveStateIds.length === 0) {
+        const allActiveStates = await prisma.state.findMany({ where: { isActive: true }, select: { id: true } });
+        effectiveStateIds = allActiveStates.map((s) => s.id);
+      }
+    } else {
+      // Se apenas disputas estaduais foram configuradas, os estados da eleição são exatamente a união dos estados das disputas
+      const disputeStates = new Set<string>();
+      for (const sd of disputes.stateDisputes || []) {
+        for (const sid of sd.stateIds || []) {
+          disputeStates.add(sid);
+        }
+      }
+      effectiveStateIds = Array.from(disputeStates);
+    }
+  }
+
+  const election = await prisma.$transaction(async (tx) => {
+    const createdElection = await tx.election.create({
+      data: {
+        ...data,
+        startDate: data.startDate && data.startDate.trim() !== '' ? new Date(data.startDate) : undefined,
+        endDate: data.endDate && data.endDate.trim() !== '' ? new Date(data.endDate) : undefined,
+        electionStates: effectiveStateIds.length
+          ? { create: effectiveStateIds.map((stateId) => ({ stateId })) }
+          : undefined,
+      },
+      include: { electionStates: { include: { state: true } } },
+    });
+
+    // Se for 2º turno com disputas configuradas, cria automaticamente os cargos e suas disputas estaduais
+    if (data.round === 2 && disputes) {
+      let orderIndex = 1;
+
+      // 1. Cargos nacionais selecionados (ex: Presidente)
+      if (disputes.nationalPositionIds && disputes.nationalPositionIds.length > 0) {
+        const nationalPositions = await tx.position.findMany({
+          where: { id: { in: disputes.nationalPositionIds } },
+        });
+
+        for (const p of nationalPositions) {
+          await tx.electionPosition.create({
+            data: {
+              electionId: createdElection.id,
+              positionId: p.id,
+              order: orderIndex++,
+              slots: 1, // 2º Turno sempre 1 vaga por disputa
+              choicesPerVoter: 1,
+              digitCount: p.defaultDigitCount,
+              votingSystem: 'MAJORITARIO',
+              isNational: true,
+              hasSecondRound: false,
+              distributionType: 'NACIONAL',
+            },
+          });
+        }
+      }
+
+      // 2. Cargos estaduais com seleção seletiva de estados (ex: Governador em SP, RJ...)
+      if (disputes.stateDisputes && disputes.stateDisputes.length > 0) {
+        for (const sd of disputes.stateDisputes) {
+          if (!sd.stateIds || sd.stateIds.length === 0) continue;
+
+          const p = await tx.position.findUnique({ where: { id: sd.positionId } });
+          if (!p) continue;
+
+          await tx.electionPosition.create({
+            data: {
+              electionId: createdElection.id,
+              positionId: p.id,
+              order: orderIndex++,
+              slots: 1,
+              choicesPerVoter: 1,
+              digitCount: p.defaultDigitCount,
+              votingSystem: 'MAJORITARIO',
+              isNational: false,
+              hasSecondRound: false,
+              distributionType: 'ESTADUAL',
+              positionStates: {
+                create: sd.stateIds.map((stateId) => ({
+                  stateId,
+                  slots: 1,
+                  hasSecondRound: false,
+                })),
+              },
+            },
+          });
+        }
+      }
+    }
+
+    return createdElection;
   });
 
   await auditService.log({
     eventType: 'ELECTION_CREATED',
-    description: data.parentElectionId
-      ? `Eleição de 2º turno "${election.name}" criada (vinculada ao 1º turno)`
-      : `Eleição "${election.name}" criada`,
+    description:
+      data.round === 2
+        ? `Eleição de 2º Turno "${election.name}" criada com sucesso`
+        : `Eleição de 1º Turno "${election.name}" criada`,
     electionId: election.id,
     adminUserId: req.adminUser!.id,
-    metadata: data.parentElectionId ? { parentElectionId: data.parentElectionId, round: election.round } : undefined,
+    metadata: { round: election.round, parentElectionId: data.parentElectionId },
   });
 
   res.status(201).json(election);

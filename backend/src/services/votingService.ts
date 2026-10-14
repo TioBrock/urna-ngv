@@ -36,7 +36,7 @@ export const votingService = {
         electionPositions: {
           where: { isActive: true },
           orderBy: { order: 'asc' },
-          include: { position: true },
+          include: { position: true, positionStates: true },
         },
       },
     });
@@ -53,6 +53,19 @@ export const votingService = {
     // 3. Verificar se o estado participa da eleição
     if (election.electionStates.length === 0) {
       throw new AppError('Estado não participa desta eleição', 400);
+    }
+
+    // Filtrar cargos que efetivamente estão em disputa para o estado do eleitor
+    const voterPositions = election.electionPositions.filter((ep) => {
+      if (ep.isNational) return true;
+      if (ep.positionStates && ep.positionStates.length > 0) {
+        return ep.positionStates.some((ps) => ps.stateId === stateId);
+      }
+      return true;
+    });
+
+    if (voterPositions.length === 0) {
+      throw new AppError('Não há cargos em disputa para o seu estado nesta eleição.', 400);
     }
 
     // 3. Verificar se IP já votou NESTA eleição (somente se validação por IP estiver ativa)
@@ -82,7 +95,7 @@ export const votingService = {
         rpgName: rpgName.trim(),
         ip,
         status: VoterStatus.IN_PROGRESS,
-        currentPositionOrder: election.electionPositions[0]?.order ?? 1,
+        currentPositionOrder: voterPositions[0]?.order ?? 1,
         currentSlot: 1,
       },
     });
@@ -100,7 +113,7 @@ export const votingService = {
       election: {
         id: election.id,
         name: election.name,
-        positions: election.electionPositions.map((ep) => ({
+        positions: voterPositions.map((ep) => ({
           id: ep.id,
           positionId: ep.positionId,
           name: ep.position.name,
@@ -186,7 +199,11 @@ export const votingService = {
         include: {
           election: {
             include: {
-              electionPositions: { where: { isActive: true }, orderBy: { order: 'asc' } },
+              electionPositions: {
+                where: { isActive: true },
+                orderBy: { order: 'asc' },
+                include: { position: true, positionStates: true },
+              },
             },
           },
         },
@@ -286,13 +303,19 @@ export const votingService = {
         },
       });
 
-      // 7. Calcular próxima posição
-      const positions = session.election.electionPositions;
+      // 7. Calcular próxima posição (filtrando apenas cargos aplicáveis ao estado do eleitor)
+      const positions = session.election.electionPositions.filter((ep) => {
+        if (ep.isNational) return true;
+        if (ep.positionStates && ep.positionStates.length > 0) {
+          return ep.positionStates.some((ps) => ps.stateId === session.stateId);
+        }
+        return true;
+      });
       const currentPosIndex = positions.findIndex((p) => p.id === electionPositionId);
       const currentPos = positions[currentPosIndex];
 
       if (!currentPos) {
-        throw new AppError('Cargo não encontrado ou inativo nesta eleição', 400);
+        throw new AppError('Cargo não encontrado ou inativo para o seu estado nesta eleição', 400);
       }
 
       let nextPositionOrder = currentPos.order;
@@ -353,7 +376,7 @@ export const votingService = {
             electionPositions: {
               where: { isActive: true },
               orderBy: { order: 'asc' },
-              include: { position: true },
+              include: { position: true, positionStates: true },
             },
           },
         },
@@ -373,6 +396,20 @@ export const votingService = {
       throw new AppError('Sessão não encontrada', 404);
     }
 
-    return session;
+    const voterPositions = session.election.electionPositions.filter((ep) => {
+      if (ep.isNational) return true;
+      if (ep.positionStates && ep.positionStates.length > 0) {
+        return ep.positionStates.some((ps) => ps.stateId === session.stateId);
+      }
+      return true;
+    });
+
+    return {
+      ...session,
+      election: {
+        ...session.election,
+        electionPositions: voterPositions,
+      },
+    };
   },
 };
